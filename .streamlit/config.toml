@@ -1,0 +1,99 @@
+[server]
+enableStaticServing = true
+runOnSave = true
+
+[theme]
+base = "light"
+
+showSidebarBorder = true
+chartCategoricalColors = ["#111111", "#333333", "#555555", "#777777", "#999999", "#BBBBBB", "#DDDDDD", "#CCCCCC", "#AAAAAA", "#888888"]
+chartSequentialColors = ["#111111", "#2A2A2A", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999", "#AAAAAA", "#BBBBBB"]
+chartDivergingColors = ["#111111", "#444444", "#777777", "#AAAAAA", "#CCCCCC", "#DDDDDD", "#EEEEEE", "#999999", "#666666", "#333333"]
+
+[theme.light]
+primaryColor = "#000000"
+linkColor = "#111111"
+
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F3F3"
+
+textColor = "#0F0F0F"
+codeBackgroundColor = "#F7F7F7"
+codeTextColor = "#111111"
+
+baseRadius = "large"
+buttonRadius = "full"
+borderColor = "#EFEFEF"
+dataframeBorderColor = "#E5E5E5"
+dataframeHeaderBackgroundColor = "#F7F7F7"
+showWidgetBorder = false
+
+redColor = "#111111"
+orangeColor = "#333333"
+yellowColor = "#555555"
+greenColor = "#777777"
+blueColor = "#999999"
+violetColor = "#BBBBBB"
+grayColor = "#808080"
+
+[theme.light.sidebar]
+primaryColor = "#111111"
+linkColor = "#111111"
+
+backgroundColor = "#FAFAFA"
+secondaryBackgroundColor = "#F2F2F2"
+
+textColor = "#111111"
+codeBackgroundColor = "#F5F5F5"
+codeTextColor = "#111111"
+
+baseRadius = "large"
+buttonRadius = "full"
+borderColor = "#E5E5E5"
+dataframeBorderColor = "#E5E5E5"
+dataframeHeaderBackgroundColor = "#F5F5F5"
+showWidgetBorder = true
+
+[theme.dark]
+primaryColor = "#2B2B2B"
+linkColor = "#F5F5F5"
+
+backgroundColor = "#0E0E0E"
+secondaryBackgroundColor = "#181818"
+
+textColor = "#F3F3F3"
+codeBackgroundColor = "#141414"
+codeTextColor = "#F5F5F5"
+
+baseRadius = "large"
+buttonRadius = "full"
+borderColor = "#2A2A2A"
+dataframeBorderColor = "#2F2F2F"
+dataframeHeaderBackgroundColor = "#161616"
+showWidgetBorder = false
+
+redColor = "#F5F5F5"
+orangeColor = "#D9D9D9"
+yellowColor = "#BFBFBF"
+greenColor = "#A6A6A6"
+blueColor = "#8C8C8C"
+violetColor = "#737373"
+grayColor = "#999999"
+
+[theme.dark.sidebar]
+primaryColor = "#2B2B2B"
+linkColor = "#F5F5F5"
+
+backgroundColor = "#141414"
+secondaryBackgroundColor = "#1C1C1C"
+
+textColor = "#F3F3F3"
+codeBackgroundColor = "#1A1A1A"
+codeTextColor = "#F5F5F5"
+
+baseRadius = "large"
+buttonRadius = "full"
+borderColor = "#2E2E2E"
+dataframeBorderColor = "#303030"
+dataframeHeaderBackgroundColor = "#1A1A1A"
+showWidgetBorder = true
