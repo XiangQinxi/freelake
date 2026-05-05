@@ -35,6 +35,8 @@ with st.expander("发布你的动态&文章", expanded=True):
         st.rerun()
 
 for _post in reversed(Post.get_all()):
+    if not _post["author"]:
+        _post["author"] = "匿名"
     with st.expander(f"{_post['author']}", expanded=True):
         st.caption(f"发布时间：{_post['created_at']}")
         st.text(_post["content"])
