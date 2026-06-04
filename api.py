@@ -1,6 +1,9 @@
+import base64
 import datetime
 import hashlib
+import os
 import typing
+import uuid
 
 import streamlit as st
 from peewee import *
@@ -8,6 +11,10 @@ from playhouse.mysql_ext import JSONField  # MySQL 专用
 
 db = SqliteDatabase("data.db")
 salt = "freelake"
+
+# 附件存储目录（在项目根目录下创建 attachments 文件夹）
+ATTACHMENTS_DIR = os.path.join(os.path.dirname(__file__), "attachments")
+os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 
 
 class BaseModel(Model):
@@ -93,6 +100,62 @@ class User:
         return self.check(
             st.session_state.get("username"), st.session_state.get("password")
         )
+
+
+def save_attachment(uploaded_file) -> dict:
+    """
+    保存上传的文件到本地磁盘，返回文件的元数据。
+    
+    参数:
+        uploaded_file: streamlit 的上传文件对象 (UploadedFile)
+    
+    返回:
+        dict: 包含文件元数据的字典
+    """
+    # 读取文件二进制数据
+    file_bytes = uploaded_file.getvalue()
+    
+    # 生成唯一文件名（保留原始扩展名）
+    ext = os.path.splitext(uploaded_file.name)[1]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    
+    # 保存文件到 attachments 目录
+    file_path = os.path.join(ATTACHMENTS_DIR, unique_name)
+    with open(file_path, "wb") as f:
+        f.write(file_bytes)
+    
+    # 返回元数据（不包含文件内容，只存路径）
+    return {
+        "original_name": uploaded_file.name,   # 原始文件名
+        "saved_name": unique_name,              # 存储在磁盘的文件名
+        "type": uploaded_file.type,             # MIME 类型（如 image/png）
+        "size": uploaded_file.size,             # 文件大小（字节）
+        "path": unique_name,                    # 相对路径（用于读取时拼接）
+    }
+
+
+def get_attachment_file(saved_name: str) -> bytes:
+    """
+    根据保存的文件名读取附件二进制数据。
+    
+    参数:
+        saved_name: 数据库里存的文件名
+    
+    返回:
+        bytes: 文件的二进制数据
+    """
+    file_path = os.path.join(ATTACHMENTS_DIR, saved_name)
+    with open(file_path, "rb") as f:
+        return f.read()
+
+
+def get_attachment_base64(saved_name: str) -> str:
+    """
+    根据保存的文件名读取附件并转为 base64 字符串。
+    用于在页面上展示图片等。
+    """
+    file_bytes = get_attachment_file(saved_name)
+    return base64.b64encode(file_bytes).decode()
 
 
 class Post:
