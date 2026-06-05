@@ -44,6 +44,7 @@ class _Post(BaseModel):
     content = TextField()
     created_at = DateTimeField(default=datetime.datetime.now)
     attachments = JSONField(default=list)
+    tags = JSONField(default=list)
 
 
 db.connect()
@@ -180,6 +181,7 @@ class Post:
         title: str,
         content: str,
         attachments: typing.List[dict[str, str]],
+        tags: typing.List[str] = None,
     ):
         """发布文章"""
         print(f"{author}发布了新文章：{title}")
@@ -187,10 +189,26 @@ class Post:
             _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
         )  # 获取当前最大 ID 并加 1，初始为 1
         _Post.create(
-            id=_id, author=author, title=title, content=content, attachments=attachments
+            id=_id, author=author, title=title, content=content, attachments=attachments, tags=tags or []
         )
 
     @staticmethod
     def get_all() -> list[dict[str, str]]:
         """数据整理成`list[dict[str, str]]`"""
         return list(_Post.select().dicts())
+
+    @staticmethod
+    def get(_id: int) -> dict:
+        return _Post.select(_Post.id == _id).dicts() 
+
+
+def format_size(size_bytes: int) -> str:
+    """将字节数转换为人类可读的文件大小格式"""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / 1024 / 1024:.1f} MB"
+    else:
+        return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
