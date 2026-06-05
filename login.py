@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from api import User, sha256
+from api import User
 
 state = st.session_state
 cookies = state["cookies"]

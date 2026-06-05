@@ -7,13 +7,13 @@ import uuid
 
 import streamlit as st
 from peewee import *
-from playhouse.mysql_ext import JSONField  # MySQL 专用
+from playhouse.mysql_ext import JSONField  # NOQA
 
 db = SqliteDatabase("data.db")
 salt = "freelake"
 
 # 附件存储目录（在项目根目录下创建 attachments 文件夹）
-ATTACHMENTS_DIR = os.path.join(os.path.dirname(__file__), "attachments")
+ATTACHMENTS_DIR = os.path.join(os.path.dirname(__file__), "attachments")  # NOQA
 os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 
 
@@ -135,7 +135,7 @@ def save_attachment(uploaded_file) -> dict:
     unique_name = f"{uuid.uuid4().hex}{ext}"
 
     # 保存文件到 attachments 目录
-    file_path = os.path.join(ATTACHMENTS_DIR, unique_name)
+    file_path = os.path.join(ATTACHMENTS_DIR, unique_name)  # NOQA
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
@@ -159,7 +159,7 @@ def get_attachment_file(saved_name: str) -> bytes:
     返回:
         bytes: 文件的二进制数据
     """
-    file_path = os.path.join(ATTACHMENTS_DIR, saved_name)
+    file_path = os.path.join(ATTACHMENTS_DIR, saved_name)  # NOQA
     with open(file_path, "rb") as f:
         return f.read()
 
@@ -183,11 +183,11 @@ class Post:
     ):
         """发布文章"""
         print(f"{author}发布了新文章：{title}")
-        id = (
+        _id = (
             _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
         )  # 获取当前最大 ID 并加 1，初始为 1
         _Post.create(
-            id=id, author=author, title=title, content=content, attachments=attachments
+            id=_id, author=author, title=title, content=content, attachments=attachments
         )
 
     @staticmethod

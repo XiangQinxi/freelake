@@ -19,8 +19,16 @@ if userconfig:
             width="content",
         )
 
-    if st.popover("修改密码", type="secondary"):
-        pass
+    with st.popover("修改密码", type="secondary"):
+        original_password = st.text_input("请输入原密码", type="password")
+        new_password = st.text_input("请输入新密码", type="password")
+        if st.button("提交"):
+            if not original_password or not new_password:
+                st.error("请输入原密码和新密码！")
+            else:
+                user.modify_password(st.session_state.get("username"), original_password, new_password)
+                st.success("密码修改成功！")
+                st.rerun()
     if st.button("退出登录", type="primary"):
         st.switch_page("logout.py")
 else:
