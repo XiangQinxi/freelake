@@ -37,14 +37,17 @@ if post_id:
                 saved_name = att.get("saved_name", "")
                 file_bytes = get_attachment_file(saved_name) if saved_name else b""
 
-                # 如果是图片，显示缩略图
                 if att.get("type", "").startswith("image/"):
                     b64 = base64.b64encode(file_bytes).decode()
                     col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("video/"):
                     col_a.markdown("🎬")
+                    b64 = base64.b64encode(file_bytes).decode()
+                    col_a.video(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("audio/"):
                     col_a.markdown("🎵")
+                    b64 = base64.b64encode(file_bytes).decode()
+                    col_a.audio(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("application/"):
                     col_a.markdown("📄")
                 else:
@@ -137,14 +140,17 @@ else:
                     saved_name = att.get("saved_name", "")
                     file_bytes = get_attachment_file(saved_name) if saved_name else b""
 
-                    # 如果是图片，显示缩略图
                     if att.get("type", "").startswith("image/"):
                         b64 = base64.b64encode(file_bytes).decode()
                         col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                     elif att.get("type", "").startswith("video/"):
                         col_a.markdown("🎬")
+                        b64 = base64.b64encode(file_bytes).decode()
+                        col_a.video(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                     elif att.get("type", "").startswith("audio/"):
                         col_a.markdown("🎵")
+                        b64 = base64.b64encode(file_bytes).decode()
+                        col_a.audio(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                     elif att.get("type", "").startswith("application/"):
                         col_a.markdown("📄")
                     else:
