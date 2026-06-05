@@ -28,6 +28,7 @@ state["password"] = cookies.get("password", "")
 st.set_page_config(page_icon="logo.ico", layout="centered")
 
 home_page = st.Page("home.py", title="首页")
+publish_page = st.Page("publish.py", title="发布文章")
 login_page = st.Page("login.py", title="登录")
 logout_page = st.Page("logout.py", title="退出登录")
 userconfig_page = st.Page("user_config.py", title="用户配置")
@@ -37,6 +38,7 @@ account_pages = []
 if not user.check_by_state():
     account_pages.append(login_page)
 else:
+    account_pages.append(publish_page)
     account_pages.append(userconfig_page)
     account_pages.append(logout_page)
 

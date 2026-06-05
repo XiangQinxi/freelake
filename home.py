@@ -4,6 +4,7 @@ import time
 import streamlit as st
 
 from api import Post, format_size, get_attachment_file, save_attachment
+from const import tags
 
 
 params = st.query_params
@@ -14,8 +15,9 @@ if post_id:
         st.rerun()
     post = Post.get(int(post_id))
     if post:
-        print(post)
-        st.subheader(f"{post['title']}")
+        col_1, col_2 = st.columns([0.1, 0.9])
+        col_1.image("default_avatar.jpeg", width=55)
+        col_2.subheader(f"{post['title']}")
         st.table(
             {
                 ":material/person: 作者": post["author"],
@@ -25,7 +27,7 @@ if post_id:
             border="horizontal",
             width="content",
         )
-        st.text(post["content"])
+        st.markdown(post["content"])
 
         # 显示附件
         attachments = post.get("attachments", [])
@@ -73,56 +75,29 @@ if post_id:
 else:
     st.text("我构建的简易论坛程序....")
 
-    with st.expander("发布你的动态&文章", expanded=True):
-        new_title = st.text_input(
-            "新文章标题", placeholder="请输入标题", label_visibility="collapsed"
-        )
-        new_content = st.text_area(
-            "新文章内容", placeholder="请输入内容", label_visibility="collapsed"
-        )
-        uploaded_files = st.file_uploader(
-            "附件（支持图片、文档等各种文件）",
-            accept_multiple_files=True,
-        )
-        if st.button("发布"):
-            username = st.session_state.get("username")
-            if not username:
-                st.error("请先登录！")
-            elif not new_title:
-                st.error("请输入标题！")
-            elif not new_content:
-                st.error("请输入内容！")
-            else:
-                _attachments = []
-                if uploaded_files:
-                    for uploaded_file in uploaded_files:
-                        meta = save_attachment(uploaded_file)
-                        _attachments.append(meta)
-
-                Post.publish(
-                    author=username,
-                    title=new_title,
-                    content=new_content if new_content else "",
-                    attachments=_attachments,
-                )
-                st.toast("发布成功！")
-                new_title = None
-                new_content = None
-                uploaded_files = None
-                time.sleep(2)
-                st.rerun()
-
+    with st.container(border=True):
+        st.page_link("publish.py", label="发布文章",)
 
     st.text_input(
         " ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:"
     )
+    selected_tag = st.pills("标签", tags)
 
     # 显示文章列表
     for _post in reversed(Post.get_all()):
+        if selected_tag:
+            if selected_tag not in _post["tags"]:
+                continue
         if not _post["author"]:
             _post["author"] = "匿名"
+
         with st.container(border=True):
-            st.subheader(f"{_post['title']}")
+            col_1, col_2 = st.columns([0.1, 0.9])
+            col_1.image("default_avatar.jpeg", width=55)
+            col_2.subheader(f"{_post['title']}")
+            if _post["tags"]:
+                for tag in _post["tags"]:
+                    st.badge(tag)
             st.table(
                 {
                     ":material/person: 作者": _post["author"],
@@ -132,7 +107,8 @@ else:
                 border="horizontal",
                 width="content",
             )
-            if st.button(_post["content"][0:40] + "......", key=_post["id"]):
+            st.text(_post["content"][0:40] + "...")
+            if st.button("查看详细内容", key=_post["id"]):
                 params["post_id"] = str(_post["id"])
                 st.rerun()
 
