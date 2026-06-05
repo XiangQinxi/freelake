@@ -33,21 +33,16 @@ if post_id:
             st.divider()
             st.caption("📎 附件")
             for att in attachments:
-                col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
+                col_a, col_b, col_c, col_d = st.columns([0.1, 0.5, 0.2, 0.2], vertical_alignment="center")
                 saved_name = att.get("saved_name", "")
                 file_bytes = get_attachment_file(saved_name) if saved_name else b""
 
                 if att.get("type", "").startswith("image/"):
-                    b64 = base64.b64encode(file_bytes).decode()
-                    col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
+                    col_a.markdown("🖼️")
                 elif att.get("type", "").startswith("video/"):
                     col_a.markdown("🎬")
-                    b64 = base64.b64encode(file_bytes).decode()
-                    col_a.video(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("audio/"):
                     col_a.markdown("🎵")
-                    b64 = base64.b64encode(file_bytes).decode()
-                    col_a.audio(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("application/"):
                     col_a.markdown("📄")
                 else:
@@ -55,17 +50,26 @@ if post_id:
 
                 col_b.write(f"**{att.get('original_name', '未命名')}**")
                 col_c.write(f"{format_size(att.get('size', 0))}")
+                with col_d.popover("..."):
+                    if file_bytes:
 
-                # 提供下载按钮
-                if file_bytes:
-                    st.download_button(
-                        label=f"⬇️ 下载 {att.get('original_name', '文件')}",
-                        data=file_bytes,
-                        file_name=att.get("original_name", "download"),
-                        mime=att.get("type") or "application/octet-stream",
-                        key=f"dl_{post['id']}_{saved_name}",
-                        type="primary"
-                    )
+                        if st.toggle("预览"):
+                            b64 = base64.b64encode(file_bytes).decode()
+                            if att.get("type", "").startswith("image/"):
+                                st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                            elif att.get("type", "").startswith("video/"):
+                                st.video(f"data:{att['type']};base64,{b64}")  # NOQA
+                            elif att.get("type", "").startswith("audio/"):
+                                st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+
+                        st.download_button(
+                            label=f"下载 “{att.get('original_name', '文件')}”",
+                            data=file_bytes,
+                            file_name=att.get("original_name", "download"),
+                            mime=att.get("type") or "application/octet-stream",
+                            key=f"dl_{post['id']}_{saved_name}",
+                            type="primary"
+                        )
 else:
     st.text("我构建的简易论坛程序....")
 
