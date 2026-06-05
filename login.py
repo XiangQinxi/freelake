@@ -30,10 +30,13 @@ with st.form("Login&Register"):
                     if user.register(username, password):  # NOQA
                         st.success("注册成功！")
 
+                        cookies["username"] = username
+                        cookies["password"] = password
                         state["username"] = username
                         state["password"] = password
                         time.sleep(2)
-                        st.switch_page("home.py")
+
+                        st.rerun()
                     else:
                         st.error("用户名已存在")
             else:
