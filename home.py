@@ -3,7 +3,7 @@ import time
 
 import streamlit as st
 
-from api import User, Post, save_attachment, get_attachment_file
+from api import Post, User, get_attachment_file, save_attachment
 
 
 def _format_size(size_bytes: int) -> str:
@@ -17,10 +17,13 @@ def _format_size(size_bytes: int) -> str:
     else:
         return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
 
+
 st.text("我构建的简易论坛程序....")
 
 with st.expander("发布你的动态&文章", expanded=True):
-    new_title = st.text_input("新文章标题", placeholder="请输入标题", label_visibility="collapsed")
+    new_title = st.text_input(
+        "新文章标题", placeholder="请输入标题", label_visibility="collapsed"
+    )
     new_content = st.text_area(
         "新文章内容", placeholder="请输入内容", label_visibility="collapsed"
     )
@@ -54,7 +57,9 @@ with st.expander("发布你的动态&文章", expanded=True):
             st.rerun()
 
 
-st.text_input(" ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:")
+st.text_input(
+    " ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:"
+)
 
 # 显示文章列表
 for _post in reversed(Post.get_all()):
@@ -64,14 +69,14 @@ for _post in reversed(Post.get_all()):
         st.subheader(f"{_post['title']}")
         st.table(
             {
-                ":material/person: 作者": _post['author'],
-                ":material/access_time: 发布时间": _post['created_at'],
-                ":material/info: 文章ID": _post['id'],
+                ":material/person: 作者": _post["author"],
+                ":material/access_time: 发布时间": _post["created_at"],
+                ":material/info: 文章ID": _post["id"],
             },
             border="horizontal",
             width="content",
         )
-        st.button(_post["content"][0:40]+"......", key=_post["id"])
+        st.button(_post["content"][0:40] + "......", key=_post["id"])
 
         attachments = _post.get("attachments", [])
         if attachments:

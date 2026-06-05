@@ -88,6 +88,19 @@ class User:
         """数据整理成`list[dict[str, str]]`"""
         return list(_User.select().dicts())
 
+    @staticmethod
+    def get_config(username: str) -> dict[str, str | datetime.datetime] | None:
+        """获取用户配置"""
+        user = _User.get_or_none(_User.username == username)
+        if user:
+            return {
+                "username": user.username,
+                "created_at": user.created_at,
+                "description": user.description,
+                "role": user.role,
+            }
+        return None
+
     def modify_password(self, username: str, password: str, new_password: str) -> bool:
         """修改密码"""
         if self.login(username, password):
@@ -107,42 +120,42 @@ class User:
 def save_attachment(uploaded_file) -> dict:
     """
     保存上传的文件到本地磁盘，返回文件的元数据。
-    
+
     参数:
         uploaded_file: streamlit 的上传文件对象 (UploadedFile)
-    
+
     返回:
         dict: 包含文件元数据的字典
     """
     # 读取文件二进制数据
     file_bytes = uploaded_file.getvalue()
-    
+
     # 生成唯一文件名（保留原始扩展名）
     ext = os.path.splitext(uploaded_file.name)[1]
     unique_name = f"{uuid.uuid4().hex}{ext}"
-    
+
     # 保存文件到 attachments 目录
     file_path = os.path.join(ATTACHMENTS_DIR, unique_name)
     with open(file_path, "wb") as f:
         f.write(file_bytes)
-    
+
     # 返回元数据（不包含文件内容，只存路径）
     return {
-        "original_name": uploaded_file.name,   # 原始文件名
-        "saved_name": unique_name,              # 存储在磁盘的文件名
-        "type": uploaded_file.type,             # MIME 类型（如 image/png）
-        "size": uploaded_file.size,             # 文件大小（字节）
-        "path": unique_name,                    # 相对路径（用于读取时拼接）
+        "original_name": uploaded_file.name,  # 原始文件名
+        "saved_name": unique_name,  # 存储在磁盘的文件名
+        "type": uploaded_file.type,  # MIME 类型（如 image/png）
+        "size": uploaded_file.size,  # 文件大小（字节）
+        "path": unique_name,  # 相对路径（用于读取时拼接）
     }
 
 
 def get_attachment_file(saved_name: str) -> bytes:
     """
     根据保存的文件名读取附件二进制数据。
-    
+
     参数:
         saved_name: 数据库里存的文件名
-    
+
     返回:
         bytes: 文件的二进制数据
     """
@@ -170,8 +183,12 @@ class Post:
     ):
         """发布文章"""
         print(f"{author}发布了新文章：{title}")
-        id = _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1  # 获取当前最大 ID 并加 1，初始为 1
-        _Post.create(id=id, author=author, title=title, content=content, attachments=attachments)
+        id = (
+            _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
+        )  # 获取当前最大 ID 并加 1，初始为 1
+        _Post.create(
+            id=id, author=author, title=title, content=content, attachments=attachments
+        )
 
     @staticmethod
     def get_all() -> list[dict[str, str]]:

@@ -1,8 +1,9 @@
-import streamlit as st
 import os
 
-from api import User
+import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
+
+from api import User
 
 state = st.session_state
 
@@ -29,13 +30,16 @@ st.set_page_config(page_icon="logo.ico", layout="centered")
 home_page = st.Page("home.py", title="首页")
 login_page = st.Page("login.py", title="登录")
 logout_page = st.Page("logout.py", title="退出登录")
+userconfig_page = st.Page("user_config.py", title="用户配置")
 
 user = User()
 account_pages = []
 if not user.check_by_state():
     account_pages.append(login_page)
 else:
+    account_pages.append(userconfig_page)
     account_pages.append(logout_page)
+
 
 st.title("FreeLake")
 
