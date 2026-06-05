@@ -42,12 +42,8 @@ if post_id:
                     col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("video/"):
                     col_a.markdown("🎬")
-                    b64 = base64.b64encode(file_bytes).decode()
-                    col_a.video(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("audio/"):
                     col_a.markdown("🎵")
-                    b64 = base64.b64encode(file_bytes).decode()
-                    col_a.audio(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
                 elif att.get("type", "").startswith("application/"):
                     col_a.markdown("📄")
                 else:
