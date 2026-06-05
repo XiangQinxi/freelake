@@ -42,12 +42,10 @@ with st.form("Login&Register"):
 
                     cookies["username"] = username
                     cookies["password"] = password
-                    st.rerun()
-
-
                     state["username"] = username
                     state["password"] = password
                     time.sleep(2)
-                    st.switch_page("home.py")
+                    
+                    st.rerun()
                 else:
                     st.error("用户名或密码错误")

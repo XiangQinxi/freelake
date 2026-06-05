@@ -1,6 +1,11 @@
 import streamlit as st
 
-st.session_state["username"] = ""
-st.session_state["password"] = ""
+state = st.session_state
+cookies = state["cookies"]
+
+state["username"] = ""
+state["password"] = ""
+cookies["username"] = ""
+cookies["password"] = ""
 
 st.switch_page("home.py")

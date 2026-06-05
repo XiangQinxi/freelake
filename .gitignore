@@ -2,8 +2,9 @@
 .streamlit/secrets.toml
 __pycache__
 
-# 附件存储目录（上传的文件）
 attachments/
 
-# SQLite 数据库文件
 data.db
+
+demo.py
+demo2.py

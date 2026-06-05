@@ -17,6 +17,7 @@ def _format_size(size_bytes: int) -> str:
     else:
         return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
 
+st.text("我构建的简易论坛程序....")
 
 with st.expander("发布你的动态&文章", expanded=True):
     new_title = st.text_input("新文章标题", placeholder="请输入标题", label_visibility="collapsed")
