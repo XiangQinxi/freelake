@@ -3,9 +3,9 @@ import streamlit as st
 state = st.session_state
 cookies = state["cookies"]
 
-state["username"] = ""
+state["userid"] = ""
 state["password"] = ""
-cookies["username"] = ""
+cookies["userid"] = ""
 cookies["password"] = ""
 
 st.switch_page("home.py")

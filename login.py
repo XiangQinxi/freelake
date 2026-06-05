@@ -9,17 +9,18 @@ cookies = state["cookies"]
 user = User()
 
 with st.form("Login&Register"):
-    username = st.text_input("用户名")
+    userid = st.text_input("用户ID")
     password = st.text_input("密码", type="password")
 
     register = st.toggle("注册")
 
     if register:
+        username = st.text_input("用户名")
         password2 = st.text_input("请重新输入密码", type="password")
 
     if st.form_submit_button("确认"):
-        if not username:
-            st.error("用户名不能为空")
+        if not userid:
+            st.error("用户ID不能为空")
         elif not password:
             st.error("密码不能为空")
         else:
@@ -27,28 +28,28 @@ with st.form("Login&Register"):
                 if password != password2:
                     st.error("重新输入的密码与原来的密码不一致")
                 else:
-                    if user.register(username, password):  # NOQA
+                    if user.register(userid, username, password):  # NOQA
                         st.success("注册成功！")
 
-                        cookies["username"] = username
+                        cookies["userid"] = userid
                         cookies["password"] = password
-                        state["username"] = username
+                        state["userid"] = userid
                         state["password"] = password
                         time.sleep(2)
 
                         st.rerun()
                     else:
-                        st.error("用户名已存在")
+                        st.error("用户ID已存在")
             else:
-                if user.login(username, password):
+                if user.login(userid, password):
                     st.success("登录成功！")
 
-                    cookies["username"] = username
+                    cookies["userid"] = userid
                     cookies["password"] = password
-                    state["username"] = username
+                    state["userid"] = userid
                     state["password"] = password
                     time.sleep(2)
 
                     st.rerun()
                 else:
-                    st.error("用户名或密码错误")
+                    st.error("用户ID或密码错误")

@@ -3,10 +3,10 @@ import time
 
 import streamlit as st
 
-from api import Post, format_size, get_attachment_file, save_attachment
+from api import Post, User, format_size, get_attachment_file, save_attachment
 from const import tags
 
-
+user = User()
 params = st.query_params
 post_id = params.get("post_id")
 if post_id:
@@ -20,7 +20,10 @@ if post_id:
         col_2.subheader(f"{post['title']}")
         st.table(
             {
-                ":material/person: 作者": post["author"],
+                ":material/person: 作者名称": user.get_config(post["authorid"])[
+                    "username"
+                ],  # NOQA
+                ":material/person: 作者ID": post["authorid"],
                 ":material/access_time: 发布时间": post["created_at"],
                 ":material/info: 文章ID": post["id"],
             },
@@ -35,7 +38,9 @@ if post_id:
             st.divider()
             st.caption("📎 附件")
             for att in attachments:
-                col_a, col_b, col_c, col_d = st.columns([0.1, 0.5, 0.2, 0.2], vertical_alignment="center")
+                col_a, col_b, col_c, col_d = st.columns(
+                    [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
+                )
                 saved_name = att.get("saved_name", "")
                 file_bytes = get_attachment_file(saved_name) if saved_name else b""
 
@@ -70,14 +75,19 @@ if post_id:
                             file_name=att.get("original_name", "download"),
                             mime=att.get("type") or "application/octet-stream",
                             key=f"dl_{post['id']}_{saved_name}",
-                            type="primary"
+                            type="primary",
                         )
 else:
     st.text("我构建的简易论坛程序....")
 
-    with st.container(border=True):
-        st.page_link("publish.py", label="发布文章",)
-
+    if user.check_by_state():
+        with st.container(border=True):
+            st.page_link(
+                "publish.py",
+                label="发布文章",
+            )
+    else:
+        st.warning("请登录以解锁更多功能！")
     st.text_input(
         " ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:"
     )
@@ -88,8 +98,6 @@ else:
         if selected_tag:
             if selected_tag not in _post["tags"]:
                 continue
-        if not _post["author"]:
-            _post["author"] = "匿名"
 
         with st.container(border=True):
             col_1, col_2 = st.columns([0.1, 0.9])
@@ -100,7 +108,10 @@ else:
                     st.badge(tag)
             st.table(
                 {
-                    ":material/person: 作者": _post["author"],
+                    ":material/person: 作者名称": user.get_config(_post["authorid"])[
+                        "username"
+                    ],  # NOQA
+                    ":material/person: 作者ID": _post["authorid"],
                     ":material/access_time: 发布时间": _post["created_at"],
                     ":material/info: 文章ID": _post["id"],
                 },
@@ -122,7 +133,9 @@ else:
 
                     if att.get("type", "").startswith("image/"):
                         b64 = base64.b64encode(file_bytes).decode()
-                        col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
+                        col_a.image(
+                            f"data:{att['type']};base64,{b64}", width=60
+                        )  # NOQA
                     elif att.get("type", "").startswith("video/"):
                         col_a.markdown("🎬")
                     elif att.get("type", "").startswith("audio/"):

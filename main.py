@@ -7,8 +7,8 @@ from api import User
 
 state = st.session_state
 
-if "username" not in state:
-    state["username"] = ""
+if "userid" not in state:
+    state["userid"] = ""
 if "password" not in state:
     state["password"] = ""
 
@@ -22,7 +22,7 @@ if not cookies.ready():
     st.info("⏳ 正在加载 Cookies，请稍候...")
     st.stop()
 
-state["username"] = cookies.get("username", "")
+state["userid"] = cookies.get("userid", "")
 state["password"] = cookies.get("password", "")
 
 st.set_page_config(page_icon="logo.ico", layout="centered")
