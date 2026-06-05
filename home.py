@@ -40,7 +40,13 @@ if post_id:
                 # 如果是图片，显示缩略图
                 if att.get("type", "").startswith("image/"):
                     b64 = base64.b64encode(file_bytes).decode()
-                    col_a.image(f"data:{att['type']};base64,{b64}", width=60)
+                    col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
+                elif att.get("type", "").startswith("video/"):
+                    col_a.markdown("🎬")
+                elif att.get("type", "").startswith("audio/"):
+                    col_a.markdown("🎵")
+                elif att.get("type", "").startswith("application/"):
+                    col_a.markdown("📄")
                 else:
                     col_a.markdown("📄")
 
@@ -135,6 +141,12 @@ else:
                     if att.get("type", "").startswith("image/"):
                         b64 = base64.b64encode(file_bytes).decode()
                         col_a.image(f"data:{att['type']};base64,{b64}", width=60)  # NOQA
+                    elif att.get("type", "").startswith("video/"):
+                        col_a.markdown("🎬")
+                    elif att.get("type", "").startswith("audio/"):
+                        col_a.markdown("🎵")
+                    elif att.get("type", "").startswith("application/"):
+                        col_a.markdown("📄")
                     else:
                         col_a.markdown("📄")
 
