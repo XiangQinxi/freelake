@@ -4,9 +4,8 @@ import streamlit as st
 
 from api import User, sha256
 
-st.subheader("FreeLake ~ 登录", text_alignment="center")
-
 state = st.session_state
+cookies = state["cookies"]
 user = User()
 
 with st.form("Login&Register"):
@@ -40,6 +39,11 @@ with st.form("Login&Register"):
             else:
                 if user.login(username, password):
                     st.success("登录成功！")
+
+                    cookies["username"] = username
+                    cookies["password"] = password
+                    st.rerun()
+
 
                     state["username"] = username
                     state["password"] = password

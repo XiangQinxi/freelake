@@ -19,6 +19,7 @@ def _format_size(size_bytes: int) -> str:
 
 
 with st.expander("发布你的动态&文章", expanded=True):
+    new_title = st.text_input("新文章标题", placeholder="请输入标题", label_visibility="collapsed")
     new_content = st.text_area(
         "新文章内容", placeholder="请输入内容", label_visibility="collapsed"
     )
@@ -30,6 +31,10 @@ with st.expander("发布你的动态&文章", expanded=True):
         username = st.session_state.get("username")
         if not username:
             st.error("请先登录！")
+        elif not new_title:
+            st.error("请输入标题！")
+        elif not new_content:
+            st.error("请输入内容！")
         else:
             _attachments = []
             if uploaded_files:
@@ -39,6 +44,7 @@ with st.expander("发布你的动态&文章", expanded=True):
 
             Post.publish(
                 author=username,
+                title=new_title,
                 content=new_content if new_content else "",
                 attachments=_attachments,
             )
@@ -46,19 +52,29 @@ with st.expander("发布你的动态&文章", expanded=True):
             time.sleep(2)
             st.rerun()
 
+
+st.text_input(" ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:")
+
 # 显示文章列表
 for _post in reversed(Post.get_all()):
     if not _post["author"]:
         _post["author"] = "匿名"
-    with st.expander(f"{_post['author']}", expanded=True):
-        st.caption(f"发布时间：{_post['created_at']}")
-        st.text(_post["content"])
+    with st.container(border=True):
+        st.subheader(f"{_post['title']}")
+        st.table(
+            {
+                ":material/person: 作者": _post['author'],
+                ":material/access_time: 发布时间": _post['created_at'],
+                ":material/info: 文章ID": _post['id'],
+            },
+            border="horizontal",
+            width="content",
+        )
+        st.button(_post["content"][0:40]+"......", key=_post["id"])
 
-        # 显示附件
         attachments = _post.get("attachments", [])
         if attachments:
             st.divider()
-            st.caption("📎 附件")
             for att in attachments:
                 col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
                 saved_name = att.get("saved_name", "")
@@ -73,13 +89,3 @@ for _post in reversed(Post.get_all()):
 
                 col_b.write(f"**{att.get('original_name', '未命名')}**")
                 col_c.write(f"{_format_size(att.get('size', 0))}")
-
-                # 提供下载按钮
-                if file_bytes:
-                    st.download_button(
-                        label=f"⬇️ 下载 {att.get('original_name', '文件')}",
-                        data=file_bytes,
-                        file_name=att.get("original_name", "download"),
-                        mime=att.get("type") or "application/octet-stream",
-                        key=f"dl_{_post['id']}_{saved_name}",
-                    )

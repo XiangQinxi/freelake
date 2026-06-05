@@ -38,7 +38,9 @@ class _User(BaseModel):
 class _Post(BaseModel):
     """用于存储文章的表"""
 
+    id = IntegerField()
     author = CharField()
+    title = TextField()
     content = TextField()
     created_at = DateTimeField(default=datetime.datetime.now)
     attachments = JSONField(default=list)
@@ -162,11 +164,14 @@ class Post:
     @staticmethod
     def publish(
         author: str,
+        title: str,
         content: str,
         attachments: typing.List[dict[str, str]],
     ):
         """发布文章"""
-        _Post.create(author=author, content=content, attachments=attachments)
+        print(f"{author}发布了新文章：{title}")
+        id = _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1  # 获取当前最大 ID 并加 1，初始为 1
+        _Post.create(id=id, author=author, title=title, content=content, attachments=attachments)
 
     @staticmethod
     def get_all() -> list[dict[str, str]]:
