@@ -6,10 +6,12 @@ import streamlit as st
 from api import Post, format_size, get_attachment_file, save_attachment
 
 
-st.text("我构建的简易论坛程序....")
 params = st.query_params
 post_id = params.get("post_id")
 if post_id:
+    if st.button("返回主页", type="primary"):
+        del st.query_params["post_id"]
+        st.rerun()
     post = Post.get(int(post_id))
     if post:
         print(post)
@@ -23,7 +25,41 @@ if post_id:
             border="horizontal",
             width="content",
         )
+        st.text(post["content"])
+
+        # 显示附件
+        attachments = post.get("attachments", [])
+        if attachments:
+            st.divider()
+            st.caption("📎 附件")
+            for att in attachments:
+                col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
+                saved_name = att.get("saved_name", "")
+                file_bytes = get_attachment_file(saved_name) if saved_name else b""
+
+                # 如果是图片，显示缩略图
+                if att.get("type", "").startswith("image/"):
+                    b64 = base64.b64encode(file_bytes).decode()
+                    col_a.image(f"data:{att['type']};base64,{b64}", width=60)
+                else:
+                    col_a.markdown("📄")
+
+                col_b.write(f"**{att.get('original_name', '未命名')}**")
+                col_c.write(f"{format_size(att.get('size', 0))}")
+
+                # 提供下载按钮
+                if file_bytes:
+                    st.download_button(
+                        label=f"⬇️ 下载 {att.get('original_name', '文件')}",
+                        data=file_bytes,
+                        file_name=att.get("original_name", "download"),
+                        mime=att.get("type") or "application/octet-stream",
+                        key=f"dl_{post['id']}_{saved_name}",
+                        type="primary"
+                    )
 else:
+    st.text("我构建的简易论坛程序....")
+
     with st.expander("发布你的动态&文章", expanded=True):
         new_title = st.text_input(
             "新文章标题", placeholder="请输入标题", label_visibility="collapsed"

@@ -189,7 +189,12 @@ class Post:
             _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
         )  # 获取当前最大 ID 并加 1，初始为 1
         _Post.create(
-            id=_id, author=author, title=title, content=content, attachments=attachments, tags=tags or []
+            id=_id,
+            author=author,
+            title=title,
+            content=content,
+            attachments=attachments,
+            tags=tags or [],
         )
 
     @staticmethod
@@ -198,8 +203,8 @@ class Post:
         return list(_Post.select().dicts())
 
     @staticmethod
-    def get(_id: int) -> dict:
-        return _Post.select(_Post.id == _id).dicts() 
+    def get(_id: int) -> dict | None:
+        return _Post.select().where(_Post.id == _id).dicts().get_or_none()
 
 
 def format_size(size_bytes: int) -> str:
