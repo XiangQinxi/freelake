@@ -5,7 +5,7 @@ import time
 import streamlit as st
 
 from api import Attachment, Post, User, format_size, sha256
-from const import tags, admin
+from const import admin, tags
 
 user = User()
 params = st.query_params
@@ -27,12 +27,15 @@ def basic_information(post):
     col_2.subheader(f"{post['title']}")
     if user.check_by_state():
         userconfig = user.get_config(state["userid"])
-        if post["authorid"] == state["userid"] or userconfig["role"] == admin:  # 只有作者或管理员才能操作
+        if (
+            post["authorid"] == state["userid"] or userconfig["role"] == admin
+        ):  # 只有作者或管理员才能操作
             action = col_3.menu_button(
                 "",
                 options=["编辑", "删除"],
                 icon=":material/more_vert:",
-                key=f"{post['id']}.menu", type="tertiary",
+                key=f"{post['id']}.menu",
+                type="tertiary",
             )
             match action:
                 case "编辑":
