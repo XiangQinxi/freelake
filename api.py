@@ -98,7 +98,7 @@ class User:
         return list(_User.select().dicts())
 
     @staticmethod
-    def get_config(userid: str) -> dict[str, str | datetime.datetime] | None:
+    def get_config(userid: str) -> dict[str, str] | None:
         """获取用户配置"""
         user = _User.get_or_none(_User.userid == userid)
         if user:
@@ -108,15 +108,20 @@ class User:
                 "created_at": user.created_at,
                 "description": user.description,
                 "role": user.role,
+                "avatar": user.avatar,
             }
         return None
 
-    def modify_config(self, userid: str, username: str, description: str) -> bool:
+    def modify_config(self, userid: str, username: str, description: str, avatar: str | None = None) -> bool:
         """修改用户配置"""
         if self.check_by_state():
             user = _User.get_or_none(_User.userid == userid)
             user.username = username
             user.description = description
+            if avatar:
+                user.avatar = avatar
+            else:
+                user.avatar = user.avatar  # 保持原头像未改变
             user.save()
             return True
         return False
@@ -137,60 +142,96 @@ class User:
         )
 
 
-def save_attachment(uploaded_file) -> dict:
-    """
-    保存上传的文件到本地磁盘，返回文件的元数据。
+class Attachment:
+    @staticmethod
+    def save(uploaded_file) -> dict:
+        """
+        保存上传的文件到本地磁盘，返回文件的元数据。
 
-    参数:
-        uploaded_file: streamlit 的上传文件对象 (UploadedFile)
+        参数:
+            uploaded_file: streamlit 的上传文件对象 (UploadedFile)
 
-    返回:
-        dict: 包含文件元数据的字典
-    """
-    # 读取文件二进制数据
-    file_bytes = uploaded_file.getvalue()
+        返回:
+            dict: 包含文件元数据的字典
+        """
+        # 读取文件二进制数据
+        file_bytes = uploaded_file.getvalue()
 
-    # 生成唯一文件名（保留原始扩展名）
-    ext = os.path.splitext(uploaded_file.name)[1]
-    unique_name = f"{uuid.uuid4().hex}{ext}"
+        # 生成唯一文件名（保留原始扩展名）
+        ext = os.path.splitext(uploaded_file.name)[1]
+        unique_name = f"{uuid.uuid4().hex}{ext}"
 
-    # 保存文件到 attachments 目录
-    file_path = os.path.join(ATTACHMENTS_DIR, unique_name)  # NOQA
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
+        # 保存文件到 attachments 目录
+        file_path = os.path.join(ATTACHMENTS_DIR, unique_name)  # NOQA
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
 
-    # 返回元数据（不包含文件内容，只存路径）
-    return {
-        "original_name": uploaded_file.name,  # 原始文件名
-        "saved_name": unique_name,  # 存储在磁盘的文件名
-        "type": uploaded_file.type,  # MIME 类型（如 image/png）
-        "size": uploaded_file.size,  # 文件大小（字节）
-        "path": unique_name,  # 相对路径（用于读取时拼接）
-    }
+        # 返回元数据（不包含文件内容，只存路径）
+        return {
+            "original_name": uploaded_file.name,  # 原始文件名
+            "saved_name": unique_name,  # 存储在磁盘的文件名
+            "type": uploaded_file.type,  # MIME 类型（如 image/png）
+            "size": uploaded_file.size,  # 文件大小（字节）
+            "path": unique_name,  # 相对路径（用于读取时拼接）
+        }
+
+    @staticmethod
+    def get_file(saved_name: str) -> bytes:
+        """
+        根据保存的文件名读取附件二进制数据。
+
+        参数:
+            saved_name: 数据库里存的文件名
+
+        返回:
+            bytes: 文件的二进制数据
+        """
+        file_path = os.path.join(ATTACHMENTS_DIR, saved_name)  # NOQA
+        with open(file_path, "rb") as f:
+            return f.read()
+
+    @staticmethod
+    def get_base64(saved_name: str) -> str:
+        """
+        根据保存的文件名读取附件并转为 base64 字符串。
+        用于在页面上展示图片等。
+        """
+        file_bytes = Attachment.get_file(saved_name)
+        return base64.b64encode(file_bytes).decode()
 
 
-def get_attachment_file(saved_name: str) -> bytes:
-    """
-    根据保存的文件名读取附件二进制数据。
+class Avatar:
+    @staticmethod
+    def save(uploaded_file) -> dict:
+        """
+        保存上传的头像到本地磁盘，返回文件的元数据。
 
-    参数:
-        saved_name: 数据库里存的文件名
+        参数:
+            uploaded_file: streamlit 的上传文件对象 (UploadedFile)
 
-    返回:
-        bytes: 文件的二进制数据
-    """
-    file_path = os.path.join(ATTACHMENTS_DIR, saved_name)  # NOQA
-    with open(file_path, "rb") as f:
-        return f.read()
+        返回:
+            dict: 包含文件元数据的字典
+        """
+        # 读取文件二进制数据
+        file_bytes = uploaded_file.getvalue()
 
+        # 生成唯一文件名（保留原始扩展名）
+        ext = os.path.splitext(uploaded_file.name)[1]
+        unique_name = f"{uuid.uuid4().hex}{ext}"
 
-def get_attachment_base64(saved_name: str) -> str:
-    """
-    根据保存的文件名读取附件并转为 base64 字符串。
-    用于在页面上展示图片等。
-    """
-    file_bytes = get_attachment_file(saved_name)
-    return base64.b64encode(file_bytes).decode()
+        # 保存文件到 attachments 目录
+        file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+
+        # 返回元数据（不包含文件内容，只存路径）
+        return {
+            "original_name": uploaded_file.name,  # 原始文件名
+            "saved_name": unique_name,  # 存储在磁盘的文件名
+            "type": uploaded_file.type,  # MIME 类型（如 image/png）
+            "size": uploaded_file.size,  # 文件大小（字节）
+            "path": file_path,  # 相对路径（用于读取时拼接）
+        }
 
 
 class Post:

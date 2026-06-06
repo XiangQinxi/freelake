@@ -1,9 +1,8 @@
 import base64
-import time
 
 import streamlit as st
 
-from api import Post, User, format_size, get_attachment_file, save_attachment
+from api import Post, User, format_size, Attachment
 from const import tags
 
 user = User()
@@ -16,7 +15,7 @@ if post_id:
     post = Post.get(int(post_id))
     if post:
         col_1, col_2 = st.columns([0.1, 0.9])
-        col_1.image("default_avatar.jpeg", width=55)
+        col_1.image(user.get_config(post["authorid"])["avatar"], width=55)
         col_2.subheader(f"{post['title']}")
         st.table(
             {
@@ -42,7 +41,7 @@ if post_id:
                     [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
                 )
                 saved_name = att.get("saved_name", "")
-                file_bytes = get_attachment_file(saved_name) if saved_name else b""
+                file_bytes = Attachment.get_file(saved_name) if saved_name else b""
 
                 if att.get("type", "").startswith("image/"):
                     col_a.markdown("🖼️")
@@ -101,23 +100,25 @@ else:
 
         with st.container(border=True):
             col_1, col_2 = st.columns([0.1, 0.9])
-            col_1.image("default_avatar.jpeg", width=55)
+            col_1.image(user.get_config(_post["authorid"])["avatar"], width=55)
             col_2.subheader(f"{_post['title']}")
             if _post["tags"]:
                 for tag in _post["tags"]:
                     st.badge(tag)
-            st.table(
-                {
-                    ":material/person: 作者名称": user.get_config(_post["authorid"])[
-                        "username"
-                    ],  # NOQA
-                    ":material/person: 作者ID": _post["authorid"],
-                    ":material/access_time: 发布时间": _post["created_at"],
-                    ":material/info: 文章ID": _post["id"],
-                },
-                border="horizontal",
-                width="content",
-            )
+            userconfig = user.get_config(_post["authorid"])
+            if userconfig:
+                st.table(
+                    {
+                        ":material/person: 作者名称": userconfig[
+                            "username"
+                        ],  # NOQA
+                        ":material/person: 作者ID": userconfig["userid"],
+                        ":material/access_time: 发布时间": _post["created_at"],
+                        ":material/info: 文章ID": _post["id"],
+                    },
+                    border="horizontal",
+                    width="content",
+                )
             st.text(_post["content"][0:40] + "...")
             if st.button("查看详细内容", key=_post["id"]):
                 params["post_id"] = str(_post["id"])
@@ -129,12 +130,12 @@ else:
                 for att in attachments:
                     col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
                     saved_name = att.get("saved_name", "")
-                    file_bytes = get_attachment_file(saved_name) if saved_name else b""
+                    file_bytes = Attachment.get_file(saved_name) if saved_name else b""
 
                     if att.get("type", "").startswith("image/"):
                         b64 = base64.b64encode(file_bytes).decode()
                         col_a.image(
-                            f"data:{att['type']};base64,{b64}", width=60
+                            f"data:{att['type']};base64,{b64}", width=60  # NOQA
                         )  # NOQA
                     elif att.get("type", "").startswith("video/"):
                         col_a.markdown("🎬")

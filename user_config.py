@@ -2,12 +2,14 @@ import time
 
 import streamlit as st
 
-from api import User
+from api import User, Avatar
 
 user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
 if userconfig:
     with st.expander("当前用户信息", expanded=True):
+        print(userconfig)
+        st.image(userconfig["avatar"], width=100)
         st.table(
             {
                 ":material/key: 用户ID": userconfig.get("userid"),
@@ -24,20 +26,27 @@ if userconfig:
 
         @st.dialog("修改用户信息")
         def modify_config():
+            new_avatar = st.file_uploader(
+                "上传新头像", type="image/*", label_visibility="collapsed"
+            )
             new_username = st.text_input(
-                "名称", placeholder="请输入用户名称！", value=userconfig.get("username")
+                "名称", placeholder="请输入用户名称！", value=userconfig["username"]
             )
             new_description = st.text_area(
                 "自我介绍",
                 placeholder="请输入自我介绍！",
-                value=userconfig.get("description"),
+                value=userconfig["description"],
             )
             if st.button("提交"):
                 if not new_username or not new_description:
                     st.error("请输入名称和自我介绍！")
                 else:
+                    if new_avatar:
+                        meta = Avatar.save(new_avatar)
+                    else:
+                        meta = {}
                     user.modify_config(
-                        st.session_state.get("userid"), new_username, new_description
+                        st.session_state.get("userid"), new_username, new_description, meta.get("path") if new_avatar else None
                     )
                     st.success("用户信息修改成功！")
                     time.sleep(2)

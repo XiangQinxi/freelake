@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from api import Post, save_attachment
+from api import Post, Attachment
 from const import tags
 
 st.subheader("发布文章")
@@ -30,7 +30,7 @@ with st.form(key="publish"):
             _attachments = []
             if uploaded_files:
                 for uploaded_file in uploaded_files:
-                    meta = save_attachment(uploaded_file)
+                    meta = Attachment.save(uploaded_file)
                     _attachments.append(meta)
 
             Post.publish(
