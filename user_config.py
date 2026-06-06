@@ -3,7 +3,6 @@ import time
 import streamlit as st
 
 from api import Avatar, User
-from streamlit_extras.image_crop import image_crop
 
 st.page_link("home.py", label="返回主页")
 
@@ -31,8 +30,6 @@ if userconfig:
             new_avatar = st.file_uploader(
                 "上传新头像", type="image/*", label_visibility="collapsed"
             )
-            if new_avatar:
-                new_avatar = image_crop(new_avatar.getvalue(), width=250, height=250)
             new_username = st.text_input(
                 "名称", placeholder="请输入用户名称！", value=userconfig["username"]
             )
