@@ -1,6 +1,7 @@
 import base64
 import datetime
 import hashlib
+import json
 import os
 import typing
 import uuid
@@ -28,7 +29,7 @@ class BaseModel(Model):
 class _User(BaseModel):
     """用于存储用户的表"""
 
-    userid = IntegerField()
+    userid = CharField()
     username = CharField()
     password = CharField(max_length=256)  # 哈希加密过的密码
     created_at = DateTimeField(default=datetime.datetime.now)
@@ -113,7 +114,9 @@ class User:
             }
         return None
 
-    def modify_config(self, userid: str, username: str, description: str, avatar: str | None = None) -> bool:
+    def modify_config(
+        self, userid: str, username: str, description: str, avatar: str | None = None
+    ) -> bool:
         """修改用户配置"""
         if self.check_by_state():
             user = _User.get_or_none(_User.userid == userid)
@@ -275,10 +278,20 @@ class Post:
     ) -> None:
         """添加评论"""
         _Post.update(
-            comments=fn.JSON_ARRAY_APPEND(
-                _Post.comments, "$", {"userid": userid, "content": content, "created_at": datetime.datetime.now()}
+            comments=fn.json_set(
+                _Post.comments,
+                "$[#]",
+                json.dumps(
+                    {
+                        "userid": userid,
+                        "content": content,
+                        "created_at": datetime.datetime.now().isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
             )
         ).where(_Post.id == postid).execute()
+
 
 def format_size(size_bytes: int) -> str:
     """将字节数转换为人类可读的文件大小格式"""

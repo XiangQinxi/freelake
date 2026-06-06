@@ -1,4 +1,5 @@
 import base64
+import time
 
 import streamlit as st
 
@@ -60,7 +61,6 @@ if post_id:
                 col_c.write(f"{format_size(att.get('size', 0))}")
                 with col_d.popover("..."):
                     if file_bytes:
-
                         if st.toggle("预览"):
                             b64 = base64.b64encode(file_bytes).decode()
                             if att.get("type", "").startswith("image/"):
@@ -80,16 +80,35 @@ if post_id:
                         )
         st.divider()
         col_3, col_4 = st.columns([0.8, 0.2])
-        comment = col_3.text_input("评论", placeholder="良言一句三冬暖，恶语伤人六月寒", label_visibility="collapsed")
+        new_comment = col_3.text_input(
+            "评论",
+            placeholder="良言一句三冬暖，恶语伤人六月寒",
+            label_visibility="collapsed",
+        )
         if col_4.button("提交评论"):
             if not state.get("userid"):
                 st.warning("请先登录以提交评论！")
             else:
-                if comment:
-                    Post.add_comment(int(post_id), state.get("userid"), comment)
+                if new_comment:
+                    Post.add_comment(int(post_id), state.get("userid"), new_comment)
                     st.success("评论提交成功")
+                    time.sleep(2)
+                    st.rerun()
                 else:
                     st.warning("请输入评论内容！")
+
+        if post.get("comments"):
+            st.divider()
+            comments = post["comments"]
+            st.caption(f"💬 评论 ({len(comments)})")
+            for comment in comments:
+                cfg = user.get_config(comment["userid"])
+                if cfg:
+                    col_a, col_b = st.columns([0.08, 0.92])
+                    col_a.image(cfg["avatar"], width=40)
+                    col_b.markdown(f"**{cfg['username']}**")
+                    col_b.caption(comment.get("created_at", ""))
+                    col_b.markdown(comment["content"])
 else:
     st.text("我构建的简易论坛程序....")
 
@@ -127,9 +146,7 @@ else:
             if userconfig:
                 st.table(
                     {
-                        ":material/person: 作者名称": userconfig[
-                            "username"
-                        ],  # NOQA
+                        ":material/person: 作者名称": userconfig["username"],  # NOQA
                         ":material/person: 作者ID": userconfig["userid"],
                         ":material/access_time: 发布时间": _post["created_at"],
                         ":material/info: 文章ID": _post["id"],
@@ -153,7 +170,8 @@ else:
                     if att.get("type", "").startswith("image/"):
                         b64 = base64.b64encode(file_bytes).decode()
                         col_a.image(
-                            f"data:{att['type']};base64,{b64}", width=60  # NOQA
+                            f"data:{att['type']};base64,{b64}",
+                            width=60,  # NOQA
                         )  # NOQA
                     elif att.get("type", "").startswith("video/"):
                         col_a.markdown("🎬")
