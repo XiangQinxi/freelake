@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from api import User, Avatar
+from api import Avatar, User
 
 st.page_link("home.py", label="返回主页")
 
@@ -48,7 +48,10 @@ if userconfig:
                     else:
                         meta = {}
                     user.modify_config(
-                        st.session_state.get("userid"), new_username, new_description, meta.get("path") if new_avatar else None
+                        st.session_state.get("userid"),
+                        new_username,
+                        new_description,
+                        meta.get("path") if new_avatar else None,
                     )
                     st.success("用户信息修改成功！")
                     time.sleep(2)

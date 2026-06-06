@@ -1,10 +1,10 @@
 import base64
-import time
 import json
+import time
 
 import streamlit as st
 
-from api import Post, User, format_size, Attachment
+from api import Attachment, Post, User, format_size
 from const import tags
 
 user = User()
@@ -96,7 +96,9 @@ else:
                     col_c.write(f"{format_size(att.get('size', 0))}")
                     with col_d.popover("..."):
                         if file_bytes:
-                            if st.toggle(f"预览 “{att.get('original_name', '文件')}”"):  # NOQA
+                            if st.toggle(
+                                f"预览 “{att.get('original_name', '文件')}”"
+                            ):  # NOQA
                                 b64 = base64.b64encode(file_bytes).decode()
                                 if att.get("type", "").startswith("image/"):
                                     st.image(f"data:{att['type']};base64,{b64}")  # NOQA
@@ -194,7 +196,9 @@ else:
                 if userconfig:
                     st.table(
                         {
-                            ":material/person: 作者名称": userconfig["username"],  # NOQA
+                            ":material/person: 作者名称": userconfig[
+                                "username"
+                            ],  # NOQA
                             ":material/person: 作者ID": userconfig["userid"],
                             ":material/access_time: 发布时间": _post["created_at"],
                             ":material/info: 文章ID": _post["id"],

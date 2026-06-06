@@ -7,11 +7,12 @@ import os
 import typing
 import uuid
 
-from PIL import Image
-
 import streamlit as st
 from peewee import *
+from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
+
+from const import admin, user
 
 db = SqliteDatabase("data.db")
 salt = "freelake"
@@ -133,7 +134,9 @@ class User:
             return True
         return False
 
-    def modify_role(self, userid: str, secret_key: str, role: typing.Literal["user", "admin"]) -> bool:
+    def modify_role(
+        self, userid: str, secret_key: str, role: typing.Literal[user, admin]
+    ) -> bool:
         """修改用户角色"""
         if self.check_by_state() and secret_key == st.secrets["secret_key"]:
             user = _User.get_or_none(_User.userid == userid)

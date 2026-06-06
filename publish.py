@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from api import Post, Attachment
+from api import Attachment, Post
 from const import tags
 
 st.page_link("home.py", label="返回主页")
