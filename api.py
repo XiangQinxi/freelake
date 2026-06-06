@@ -79,7 +79,11 @@ class User:
         """注册账号，如果成功则返回`True`"""
         if not self.exists(userid):  # 避免重复用户ID
             _User.create(
-                userid=userid, username=username, password=sha256(password), role=role, created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                userid=userid,
+                username=username,
+                password=sha256(password),
+                role=role,
+                created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             return True
         else:
@@ -267,7 +271,21 @@ class Avatar:
         ext = os.path.splitext(uploaded_file.name)[1]
         unique_name = f"{uuid.uuid4().hex}{ext}"
 
-        # 保存文件到 attachments 目录
+        # 裁剪为 1:1 正方形（取中心区域）
+        img = Image.open(io.BytesIO(file_bytes))
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        width, height = img.size
+        if width != height:
+            side = min(width, height)
+            left = (width - side) // 2
+            top = (height - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+        buf = io.BytesIO()
+        img.save(buf, format=img.format or "JPEG")
+        file_bytes = buf.getvalue()
+
+        # 保存文件到 avatars 目录
         file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
         with open(file_path, "wb") as f:
             f.write(file_bytes)
@@ -360,6 +378,7 @@ class Post:
     @staticmethod
     def count() -> int:
         return _Post.select().count()
+
 
 def format_size(size_bytes: int) -> str:
     """将字节数转换为人类可读的文件大小格式"""
