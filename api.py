@@ -54,13 +54,13 @@ class _Post(BaseModel):
     content = TextField()
     created_at = DateTimeField(default=datetime.datetime.now)
     attachments = JSONField(default=list)
+    attpassword = CharField(max_length=256, default="")
     tags = JSONField(default=list)
     comments = JSONField(default=list)
 
 
 db.connect()
 db.create_tables([_User, _Post], safe=True)
-
 
 def sha256(value):
     """获取哈希加密加盐后的文本"""
@@ -280,6 +280,7 @@ class Post:
         title: str,
         content: str,
         attachments: typing.List[dict[str, str]],
+        attpassword: str = "",
         tags: typing.List[str] = None,
     ):
         """发布文章"""
@@ -293,6 +294,7 @@ class Post:
             title=title,
             content=content,
             attachments=attachments,
+            attpassword=sha256(attpassword),
             tags=tags or [],
         )
 
@@ -338,3 +340,8 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
     else:
         return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
+
+
+def execute_sql(query: str) -> list[dict[str, str]]:
+    """执行SQL查询"""
+    return list(db.execute(query).dicts())

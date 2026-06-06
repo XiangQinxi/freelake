@@ -10,7 +10,6 @@ user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
 if userconfig:
     with st.expander("当前用户信息", expanded=True):
-        print(userconfig)
         st.image(userconfig["avatar"], width=100)
         st.table(
             {
