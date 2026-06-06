@@ -16,6 +16,7 @@ user_id = params.get("user_id")  # 用于查看某人的简介
 if "attpassword" not in state:
     state["attpassword"] = sha256("")
 
+
 def basic_information(post):
     col_1, col_2 = st.columns([0.1, 0.9])
     col_1.image(
@@ -38,6 +39,7 @@ def basic_information(post):
         border="horizontal",
         width="content",
     )
+
 
 if user_id:
     if st.button("返回主页", type="primary"):
@@ -78,7 +80,11 @@ else:
                 attpassword = post.get("attpassword")
 
                 if attpassword and state["attpassword"] != attpassword:
-                    attpwd = st.text_input("专属密码", placeholder="请输入专属密码以查看附件内容！", type="password")
+                    attpwd = st.text_input(
+                        "专属密码",
+                        placeholder="请输入专属密码以查看附件内容！",
+                        type="password",
+                    )
                     if st.button("检查", type="primary"):
                         state["attpassword"] = sha256(attpwd)
                         if sha256(attpwd) == attpassword:
@@ -88,7 +94,9 @@ else:
                 else:
                     for att in attachments:
                         saved_name = att.get("saved_name", "")
-                        file_bytes = Attachment.get_file(saved_name) if saved_name else b""
+                        file_bytes = (
+                            Attachment.get_file(saved_name) if saved_name else b""
+                        )
                         b64 = base64.b64encode(file_bytes).decode()
                         if att.get("type", "").startswith("image/"):
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
@@ -99,7 +107,9 @@ else:
                             [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
                         )
                         saved_name = att.get("saved_name", "")
-                        file_bytes = Attachment.get_file(saved_name) if saved_name else b""
+                        file_bytes = (
+                            Attachment.get_file(saved_name) if saved_name else b""
+                        )
 
                         if att.get("type", "").startswith("image/"):
                             b64 = Attachment.get_thumbnail_base64(
@@ -127,11 +137,17 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.image(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.video(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.audio(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",
@@ -186,7 +202,6 @@ else:
                 st.page_link(
                     "publish.py",
                     label="发布文章",
-
                 )
                 st.page_link(
                     "user_config.py",

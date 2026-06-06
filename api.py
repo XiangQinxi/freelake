@@ -62,6 +62,7 @@ class _Post(BaseModel):
 db.connect()
 db.create_tables([_User, _Post], safe=True)
 
+
 def sha256(value):
     """获取哈希加密加盐后的文本"""
     return hashlib.sha256((value + salt).encode()).hexdigest()

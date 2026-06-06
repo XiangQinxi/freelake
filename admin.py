@@ -1,10 +1,10 @@
+import os
+
+import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
-import os
-import pandas as pd
-
-from api import User, Post, execute_sql, sha256
+from api import Post, User, execute_sql, sha256
 
 st.subheader("管理员页面")
 
@@ -38,7 +38,8 @@ with st.expander("数据库管理", expanded=True):
             st.warning("请输入SQL查询语句")
 
 with st.expander("文件管理", expanded=True):
-    event = st_file_browser(os.path.dirname(os.path.abspath(__file__)),
+    event = st_file_browser(
+        os.path.dirname(os.path.abspath(__file__)),
         key="deep",
         show_choose_file=True,
         show_delete_file=True,
