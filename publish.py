@@ -43,9 +43,6 @@ with st.form(key="publish"):
                 attpassword=attpassword,
                 tags=tags,
             )
-            st.toast("发布成功！")
-            new_title = None
-            new_content = None
-            uploaded_files = None
+            st.success("发布成功！")
             time.sleep(2)
             st.switch_page("home.py")

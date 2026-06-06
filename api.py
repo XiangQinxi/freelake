@@ -283,7 +283,7 @@ class Post:
         attachments: typing.List[dict[str, str]],
         attpassword: str | None = None,
         tags: typing.List[str] = None,
-    ):
+    ) -> int:
         """发布文章"""
         print(f"{authorid}发布了新文章：{title}")
         _id = (
@@ -302,6 +302,16 @@ class Post:
             attpassword=attpassword,
             tags=tags or [],
         )
+        return _id
+
+    @staticmethod
+    def delete(postid: int) -> bool:
+        """删除文章"""
+        post = Post.get(postid)
+        if post:
+            _Post.delete().where(_Post.id == postid).execute()
+            return True
+        return False
 
     @staticmethod
     def get_all() -> list[dict[str, str]]:
