@@ -227,14 +227,6 @@ else:
         else:
             st.warning("文章不存在或已被删除！")
     else:
-        page = ...
-        with st.bottom:
-            page = pagination(
-                num_pages=Post.count() // 5 + 1,
-                max_visible_pages=5,
-                key="interactive_pagination",
-            )
-
         st.text("我构建的简易论坛程序....")
 
         if user.check_by_state():
@@ -255,41 +247,71 @@ else:
                     )
         else:
             st.warning("请登录以解锁更多功能！")
-        st.text_input(
+
+        if "search_keyword" not in state:
+            state["search_keyword"] = ""
+
+        search_keyword = st.text_input(
             " ",
             placeholder="搜索",
             label_visibility="collapsed",
             icon=":material/search:",
+            value=state["search_keyword"],
         )
+        if search_keyword != state["search_keyword"]:
+            state["search_keyword"] = search_keyword
+            st.rerun()
+
         selected_tag = st.pills("标签", tags)
 
+        if search_keyword:
+            total = Post.search_count(search_keyword)
+        else:
+            total = Post.count()
+
+        page = ...
+        with st.bottom:
+            page = pagination(
+                num_pages=max(total // 5 + 1, 1),
+                max_visible_pages=5,
+                key="interactive_pagination",
+            )
+
         # 显示文章列表
-        for post in Post.get_with_paginate(page, 5):
-            if selected_tag:
-                if selected_tag not in post["tags"]:
-                    continue
+        if total == 0:
+            st.info("没有找到相关文章。")
+        else:
+            if search_keyword:
+                posts = Post.search_with_paginate(search_keyword, page, 5)
+            else:
+                posts = Post.get_with_paginate(page, 5)
 
-            with st.container(border=True):
-                basic_information(post)
-                st.text(post["content"][0:40] + "...")
-                if st.button("查看详细内容", key=post["id"]):
-                    params["post_id"] = str(post["id"])
-                    st.rerun()
+            for post in posts:
+                if selected_tag:
+                    if selected_tag not in post["tags"]:
+                        continue
 
-                attachments = post.get("attachments", [])
-                if attachments:
-                    st.divider()
-                    st.caption(":material/attach_file: 附件")
-                    attpassword = post.get("attpassword")
+                with st.container(border=True):
+                    basic_information(post)
+                    st.text(post["content"][0:40] + "...")
+                    if st.button("查看详细内容", key=post["id"]):
+                        params["post_id"] = str(post["id"])
+                        st.rerun()
 
-                    for att in attachments:
-                        col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
-                        saved_name = att.get("saved_name", "")
-                        file_bytes = (
-                            Attachment.get_file(saved_name) if saved_name else b""
-                        )
+                    attachments = post.get("attachments", [])
+                    if attachments:
+                        st.divider()
+                        st.caption(":material/attach_file: 附件")
+                        attpassword = post.get("attpassword")
 
-                        preview(att, col_a, saved_name)
+                        for att in attachments:
+                            col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
+                            saved_name = att.get("saved_name", "")
+                            file_bytes = (
+                                Attachment.get_file(saved_name) if saved_name else b""
+                            )
 
-                        col_b.write(f"**{att.get('original_name', '未命名')}**")
-                        col_c.write(f"{format_size(att.get('size', 0))}")
+                            preview(att, col_a, saved_name)
+
+                            col_b.write(f"**{att.get('original_name', '未命名')}**")
+                            col_c.write(f"{format_size(att.get('size', 0))}")

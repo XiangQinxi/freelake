@@ -342,6 +342,35 @@ class Post:
         return list(_Post.select().dicts())
 
     @staticmethod
+    def search(keyword: str) -> list[dict[str, str]]:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .order_by(_Post.id.desc())
+            .dicts()
+        )
+
+    @staticmethod
+    def search_with_paginate(
+        keyword: str, page: int, page_size: int
+    ) -> list[dict[str, str]]:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .order_by(_Post.id.desc())
+            .paginate(page, page_size)
+            .dicts()
+        )
+
+    @staticmethod
+    def search_count(keyword: str) -> int:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .count()
+        )
+
+    @staticmethod
     def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
         return (
             _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
