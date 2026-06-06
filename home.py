@@ -223,6 +223,8 @@ else:
                             col_b.markdown(f"**{cfg['username']}** `{cfg['userid']}`")
                             col_b.caption(comment.get("created_at", ""))
                             col_b.markdown(comment["content"])
+        else:
+            st.warning("文章不存在或已被删除！")
     else:
         st.text("我构建的简易论坛程序....")
 
