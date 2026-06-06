@@ -32,15 +32,15 @@ def basic_information(post):
         ):  # 只有作者或管理员才能操作
             action = col_3.menu_button(
                 "",
-                options=["编辑", "删除"],
+                options=[":material/edit: 编辑", ":material/delete: 删除"],
                 icon=":material/more_vert:",
                 key=f"{post['id']}.menu",
                 type="tertiary",
             )
             match action:
-                case "编辑":
+                case ":material/edit: 编辑":
                     pass
-                case "删除":
+                case ":material/delete: 删除":
                     if Post.delete(post["id"]):
                         st.success("文章删除成功！")
                         time.sleep(2)
@@ -61,6 +61,28 @@ def basic_information(post):
         border="horizontal",
         width="content",
     )
+
+
+def preview(att, container, saved_name, auto_preview=True):
+    if att.get("type", "").startswith("image/"):
+        if not attpassword or not auto_preview:
+            b64 = Attachment.get_thumbnail_base64(
+                saved_name, max_width=200
+            )
+            container.image(
+                f"data:image/jpeg;base64,{b64}",  # NOQA
+                width=60,  # NOQA
+            )  # NOQA
+        else:
+            container.markdown(":material/image:")
+    elif att.get("type", "").startswith("video/"):
+        container.markdown(":material/smart_display:")
+    elif att.get("type", "").startswith("audio/"):
+        container.markdown(":material/headphones:")
+    elif att.get("type", "").startswith("application/"):
+        container.markdown(":material/insert_drive_file:")
+    else:
+        container.markdown(":material/insert_drive_file:")
 
 
 if user_id:
@@ -133,22 +155,7 @@ else:
                             Attachment.get_file(saved_name) if saved_name else b""
                         )
 
-                        if att.get("type", "").startswith("image/"):
-                            b64 = Attachment.get_thumbnail_base64(
-                                saved_name, max_width=200
-                            )
-                            col_a.image(
-                                f"data:image/jpeg;base64,{b64}",  # NOQA
-                                width=60,  # NOQA
-                            )  # NOQA
-                        elif att.get("type", "").startswith("video/"):
-                            col_a.markdown("🎬")
-                        elif att.get("type", "").startswith("audio/"):
-                            col_a.markdown("🎵")
-                        elif att.get("type", "").startswith("application/"):
-                            col_a.markdown("📄")
-                        else:
-                            col_a.markdown("📄")
+                        preview(att, col_a, saved_name, auto_preview=False)
 
                         col_b.write(f"**{att.get('original_name', '未命名')}**")
                         col_c.write(f"{format_size(att.get('size', 0))}")
@@ -202,7 +209,7 @@ else:
             if post.get("comments"):
                 st.divider()
                 comments = post["comments"]
-                with st.expander(f"💬 评论 ({len(comments)})", expanded=True):
+                with st.expander(f":material/comment: 评论 ({len(comments)})", expanded=True):
                     for comment in comments:
                         comment = json.loads(comment)
                         cfg = user.get_config(comment["userid"])
@@ -255,6 +262,7 @@ else:
                 attachments = post.get("attachments", [])
                 if attachments:
                     st.divider()
+                    st.caption(":material/attach_file: 附件")
                     attpassword = post.get("attpassword")
 
                     for att in attachments:
@@ -264,25 +272,7 @@ else:
                             Attachment.get_file(saved_name) if saved_name else b""
                         )
 
-                        if att.get("type", "").startswith("image/"):
-                            if not attpassword:
-                                b64 = Attachment.get_thumbnail_base64(
-                                    saved_name, max_width=200
-                                )
-                                col_a.image(
-                                    f"data:image/jpeg;base64,{b64}",  # NOQA
-                                    width=60,  # NOQA
-                                )  # NOQA
-                            else:
-                                col_a.markdown("🖼️")
-                        elif att.get("type", "").startswith("video/"):
-                            col_a.markdown("🎬")
-                        elif att.get("type", "").startswith("audio/"):
-                            col_a.markdown("🎵")
-                        elif att.get("type", "").startswith("application/"):
-                            col_a.markdown("📄")
-                        else:
-                            col_a.markdown("📄")
+                        preview(att, col_a, saved_name)
 
                         col_b.write(f"**{att.get('original_name', '未命名')}**")
                         col_c.write(f"{format_size(att.get('size', 0))}")
