@@ -3,3 +3,4 @@ playhouse
 peewee
 streamlit-cookies-manager
 Pillow
+streamlit-file-browser

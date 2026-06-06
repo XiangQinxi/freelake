@@ -34,6 +34,7 @@ login_page = st.Page("login.py", title="登录")
 logout_page = st.Page("logout.py", title="退出登录")
 userconfig_page = st.Page("user_config.py", title="用户配置")
 upgrade_page = st.Page("upgrade.py", title="升级管理员")
+admin_page = st.Page("admin.py", title="管理员页面")
 
 user = User()
 account_pages = []
@@ -44,6 +45,8 @@ else:
     account_pages.append(userconfig_page)
     if user.get_config(state["userid"])["role"] != admin:
         account_pages.append(upgrade_page)
+    else:
+        account_pages.append(admin_page)
     account_pages.append(logout_page)
 
 
