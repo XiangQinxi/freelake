@@ -7,7 +7,9 @@ from const import tags
 
 user = User()
 params = st.query_params
+state = st.session_state
 post_id = params.get("post_id")
+
 if post_id:
     if st.button("返回主页", type="primary"):
         del st.query_params["post_id"]
@@ -76,6 +78,18 @@ if post_id:
                             key=f"dl_{post['id']}_{saved_name}",
                             type="primary",
                         )
+        st.divider()
+        col_3, col_4 = st.columns([0.8, 0.2])
+        comment = col_3.text_input("评论", placeholder="良言一句三冬暖，恶语伤人六月寒", label_visibility="collapsed")
+        if col_4.button("提交评论"):
+            if not state.get("userid"):
+                st.warning("请先登录以提交评论！")
+            else:
+                if comment:
+                    Post.add_comment(int(post_id), state.get("userid"), comment)
+                    st.success("评论提交成功")
+                else:
+                    st.warning("请输入评论内容！")
 else:
     st.text("我构建的简易论坛程序....")
 
@@ -84,6 +98,10 @@ else:
             st.page_link(
                 "publish.py",
                 label="发布文章",
+            )
+            st.page_link(
+                "user_config.py",
+                label="用户配置",
             )
     else:
         st.warning("请登录以解锁更多功能！")

@@ -50,6 +50,7 @@ class _Post(BaseModel):
     created_at = DateTimeField(default=datetime.datetime.now)
     attachments = JSONField(default=list)
     tags = JSONField(default=list)
+    comments = JSONField(default=list)
 
 
 db.connect()
@@ -266,6 +267,18 @@ class Post:
     def get(_id: int) -> dict | None:
         return _Post.select().where(_Post.id == _id).dicts().get_or_none()
 
+    @staticmethod
+    def add_comment(
+        postid: int,
+        userid: str,
+        content: str,
+    ) -> None:
+        """添加评论"""
+        _Post.update(
+            comments=fn.JSON_ARRAY_APPEND(
+                _Post.comments, "$", {"userid": userid, "content": content, "created_at": datetime.datetime.now()}
+            )
+        ).where(_Post.id == postid).execute()
 
 def format_size(size_bytes: int) -> str:
     """将字节数转换为人类可读的文件大小格式"""
