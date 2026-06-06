@@ -1,5 +1,6 @@
 import base64
 import time
+import json
 
 import streamlit as st
 
@@ -100,15 +101,16 @@ if post_id:
         if post.get("comments"):
             st.divider()
             comments = post["comments"]
-            st.caption(f"💬 评论 ({len(comments)})")
-            for comment in comments:
-                cfg = user.get_config(comment["userid"])
-                if cfg:
-                    col_a, col_b = st.columns([0.08, 0.92])
-                    col_a.image(cfg["avatar"], width=40)
-                    col_b.markdown(f"**{cfg['username']}**")
-                    col_b.caption(comment.get("created_at", ""))
-                    col_b.markdown(comment["content"])
+            with st.expander(f"💬 评论 ({len(comments)})", expanded=True):
+                for comment in comments:
+                    comment = json.loads(comment)
+                    cfg = user.get_config(comment["userid"])
+                    if cfg:
+                        col_a, col_b = st.columns([0.08, 0.92])
+                        col_a.image(cfg["avatar"], width=40)
+                        col_b.markdown(f"**{cfg['username']}** `{cfg['userid']}`")
+                        col_b.caption(comment.get("created_at", ""))
+                        col_b.markdown(comment["content"])
 else:
     st.text("我构建的简易论坛程序....")
 

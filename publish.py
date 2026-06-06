@@ -5,6 +5,7 @@ import streamlit as st
 from api import Post, Attachment
 from const import tags
 
+st.page_link("home.py", label="返回主页")
 st.subheader("发布文章")
 with st.form(key="publish"):
     new_title = st.text_input(

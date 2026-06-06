@@ -4,6 +4,8 @@ import streamlit as st
 
 from api import User, Avatar
 
+st.page_link("home.py", label="返回主页")
+
 user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
 if userconfig:
