@@ -91,7 +91,7 @@ if user_id:
         st.rerun()
     userconfig = user.get_config(user_id)
     if userconfig:
-        st.image(userconfig["avatar"], width=100)
+        st.image(userconfig["avatar"], width=250)
         st.table(
             {
                 ":material/key: 用户ID": userconfig.get("userid"),
@@ -249,21 +249,22 @@ else:
         else:
             st.warning("请登录以解锁更多功能！")
 
-        search_keyword = st.text_input(
-            " ",
-            placeholder="搜索",
-            label_visibility="collapsed",
-            icon=":material/search:",
-            value=params.get("search_keyword", ""),
-        )
-        if search_keyword != params.get("search_keyword", ""):
-            if search_keyword:
-                params["search_keyword"] = search_keyword
-            else:
-                del params["search_keyword"]
-            st.rerun()
+        with st.container(border=True):
+            search_keyword = st.text_input(
+                " ",
+                placeholder="搜索",
+                label_visibility="collapsed",
+                icon=":material/search:",
+                value=params.get("search_keyword", ""),
+            )
+            if search_keyword != params.get("search_keyword", ""):
+                if search_keyword:
+                    params["search_keyword"] = search_keyword
+                else:
+                    del params["search_keyword"]
+                st.rerun()
 
-        selected_tag = st.pills(":material/filter_alt: 筛选", tags)
+            selected_tag = st.pills(":material/filter_alt: 筛选", tags)
 
         if search_keyword:
             total = Post.search_count(search_keyword)
