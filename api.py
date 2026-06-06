@@ -36,7 +36,7 @@ class _User(BaseModel):
     userid = CharField()
     username = CharField()
     password = CharField(max_length=256)  # 哈希加密过的密码
-    created_at = DateTimeField(default=datetime.datetime.now)
+    created_at = CharField()
     description = TextField(default="这个用户有点懒，什么也没留下~")
     avatar = CharField(default="default_avatar.jpeg")  # 头像文件地址
     role = CharField(default="user")
@@ -52,7 +52,7 @@ class _Post(BaseModel):
     authorid = CharField()
     title = TextField()
     content = TextField()
-    created_at = DateTimeField(default=datetime.datetime.now)
+    created_at = CharField()
     attachments = JSONField(default=list)
     attpassword = CharField(max_length=256, default="")
     tags = JSONField(default=list)
@@ -79,7 +79,7 @@ class User:
         """注册账号，如果成功则返回`True`"""
         if not self.exists(userid):  # 避免重复用户ID
             _User.create(
-                userid=userid, username=username, password=sha256(password), role=role
+                userid=userid, username=username, password=sha256(password), role=role, created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
             return True
         else:
@@ -305,6 +305,7 @@ class Post:
             id=_id,
             authorid=authorid,
             title=title,
+            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             content=content,
             attachments=attachments,
             attpassword=attpassword,
