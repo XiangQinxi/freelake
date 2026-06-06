@@ -280,7 +280,7 @@ class Post:
         title: str,
         content: str,
         attachments: typing.List[dict[str, str]],
-        attpassword: str = "",
+        attpassword: str | None = None,
         tags: typing.List[str] = None,
     ):
         """发布文章"""
@@ -288,13 +288,17 @@ class Post:
         _id = (
             _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
         )  # 获取当前最大 ID 并加 1，初始为 1
+        if attpassword:
+            attpassword = sha256(attpassword)
+        else:
+            attpassword = ""
         _Post.create(
             id=_id,
             authorid=authorid,
             title=title,
             content=content,
             attachments=attachments,
-            attpassword=sha256(attpassword),
+            attpassword=attpassword,
             tags=tags or [],
         )
 

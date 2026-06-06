@@ -4,9 +4,13 @@ from streamlit_file_browser import st_file_browser
 import os
 import pandas as pd
 
-from api import User, Post, execute_sql
+from api import User, Post, execute_sql, sha256
 
 st.subheader("管理员页面")
+
+original_text = st.text_input("加密文本")
+if original_text:
+    st.text(sha256(original_text))
 
 with st.expander("数据库管理", expanded=True):
     with st.expander("用户管理", expanded=True):

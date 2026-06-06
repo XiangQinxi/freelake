@@ -19,6 +19,7 @@ with st.form(key="publish"):
         "附件（支持图片、文档等各种文件）",
         accept_multiple_files=True,
     )
+    attpassword = st.text_input("附件专属密码", type="password")
     if st.form_submit_button("发布"):
         userid = st.session_state.get("userid")
         if not userid:
@@ -39,6 +40,7 @@ with st.form(key="publish"):
                 title=new_title,
                 content=new_content if new_content else "",
                 attachments=_attachments,
+                attpassword=attpassword,
                 tags=tags,
             )
             st.toast("发布成功！")

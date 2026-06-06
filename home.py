@@ -4,7 +4,7 @@ import time
 
 import streamlit as st
 
-from api import Attachment, Post, User, format_size
+from api import Attachment, Post, User, format_size, sha256
 from const import tags
 
 user = User()
@@ -12,6 +12,32 @@ params = st.query_params
 state = st.session_state
 post_id = params.get("post_id")
 user_id = params.get("user_id")  # 用于查看某人的简介
+
+if "attpassword" not in state:
+    state["attpassword"] = sha256("")
+
+def basic_information(post):
+    col_1, col_2 = st.columns([0.1, 0.9])
+    col_1.image(
+        user.get_config(post["authorid"])["avatar"],
+        width=55,
+        link=f"user_config.py?user_id={post['authorid']}",
+    )
+    col_2.subheader(f"{post['title']}")
+    if post["tags"]:
+        for tag in post["tags"]:
+            st.badge(tag)
+    st.table(
+        {
+            ":material/person: 作者名称": user.get_config(post["authorid"])[
+                "username"
+            ],  # NOQA
+            ":material/access_time: 发布时间": post["created_at"],
+            ":material/info: 文章ID": post["id"],
+        },
+        border="horizontal",
+        width="content",
+    )
 
 if user_id:
     if st.button("返回主页", type="primary"):
@@ -40,25 +66,8 @@ else:
             st.rerun()
         post = Post.get(int(post_id))
         if post:
-            col_1, col_2 = st.columns([0.1, 0.9])
-            col_1.image(
-                user.get_config(post["authorid"])["avatar"],
-                width=55,
-                link=f"user_config.py?user_id={post['authorid']}",
-            )
-            col_2.subheader(f"{post['title']}")
-            st.table(
-                {
-                    ":material/person: 作者名称": user.get_config(post["authorid"])[
-                        "username"
-                    ],  # NOQA
-                    ":material/person: 作者ID": post["authorid"],
-                    ":material/access_time: 发布时间": post["created_at"],
-                    ":material/info: 文章ID": post["id"],
-                },
-                border="horizontal",
-                width="content",
-            )
+            basic_information(post)
+
             st.markdown(post["content"])
 
             # 显示附件
@@ -66,59 +75,79 @@ else:
             if attachments:
                 st.divider()
 
-                for att in attachments:
-                    saved_name = att.get("saved_name", "")
-                    file_bytes = Attachment.get_file(saved_name) if saved_name else b""
-                    b64 = base64.b64encode(file_bytes).decode()
-                    if att.get("type", "").startswith("image/"):
-                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                attpassword = post.get("attpassword")
 
-                st.caption("📎 附件")
-                for att in attachments:
-                    col_a, col_b, col_c, col_d = st.columns(
-                        [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
-                    )
-                    saved_name = att.get("saved_name", "")
-                    file_bytes = Attachment.get_file(saved_name) if saved_name else b""
+                if attpassword and state["attpassword"] != attpassword:
+                    attpwd = st.text_input("专属密码", placeholder="请输入专属密码以查看附件内容！")
+                    if st.button("检查", type="primary"):
+                        state["attpassword"] = sha256(attpwd)
+                        if sha256(attpwd) == attpassword:
+                            st.success("验证成功！")
+                            time.sleep(1)
+                            st.rerun()
+                else:
+                    for att in attachments:
+                        saved_name = att.get("saved_name", "")
+                        file_bytes = Attachment.get_file(saved_name) if saved_name else b""
+                        b64 = base64.b64encode(file_bytes).decode()
+                        if att.get("type", "").startswith("image/"):
+                            st.image(f"data:{att['type']};base64,{b64}")  # NOQA
 
-                    if att.get("type", "").startswith("image/"):
-                        col_a.markdown("🖼️")
-                    elif att.get("type", "").startswith("video/"):
-                        col_a.markdown("🎬")
-                    elif att.get("type", "").startswith("audio/"):
-                        col_a.markdown("🎵")
-                    elif att.get("type", "").startswith("application/"):
-                        col_a.markdown("📄")
-                    else:
-                        col_a.markdown("📄")
+                    st.caption("📎 附件")
+                    for att in attachments:
+                        col_a, col_b, col_c, col_d = st.columns(
+                            [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
+                        )
+                        saved_name = att.get("saved_name", "")
+                        file_bytes = Attachment.get_file(saved_name) if saved_name else b""
 
-                    col_b.write(f"**{att.get('original_name', '未命名')}**")
-                    col_c.write(f"{format_size(att.get('size', 0))}")
-                    with col_d.popover("..."):
-                        if file_bytes:
-                            if st.toggle(
-                                f"预览 “{att.get('original_name', '文件')}”"
-                            ):  # NOQA
-                                b64 = base64.b64encode(file_bytes).decode()
-                                if att.get("type", "").startswith("image/"):
-                                    st.image(f"data:{att['type']};base64,{b64}")  # NOQA
-                                elif att.get("type", "").startswith("video/"):
-                                    st.video(f"data:{att['type']};base64,{b64}")  # NOQA
-                                elif att.get("type", "").startswith("audio/"):
-                                    st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+                        if att.get("type", "").startswith("image/"):
+                            if not attpassword:
+                                b64 = Attachment.get_thumbnail_base64(
+                                    saved_name, max_width=200
+                                )
+                                col_a.image(
+                                    f"data:image/jpeg;base64,{b64}",  # NOQA
+                                    width=60,  # NOQA
+                                )  # NOQA
+                            else:
+                                col_a.markdown("🖼️")
+                        elif att.get("type", "").startswith("video/"):
+                            col_a.markdown("🎬")
+                        elif att.get("type", "").startswith("audio/"):
+                            col_a.markdown("🎵")
+                        elif att.get("type", "").startswith("application/"):
+                            col_a.markdown("📄")
+                        else:
+                            col_a.markdown("📄")
 
-                            st.download_button(
-                                label=f"下载 “{att.get('original_name', '文件')}”",
-                                data=file_bytes,
-                                file_name=att.get("original_name", "download"),
-                                mime=att.get("type") or "application/octet-stream",
-                                key=f"dl_{post['id']}_{saved_name}",
-                                type="primary",
-                            )
+                        col_b.write(f"**{att.get('original_name', '未命名')}**")
+                        col_c.write(f"{format_size(att.get('size', 0))}")
+                        with col_d.popover("..."):
+                            if file_bytes:
+                                if st.toggle(
+                                    f"预览 “{att.get('original_name', '文件')}”"
+                                ):  # NOQA
+                                    b64 = base64.b64encode(file_bytes).decode()
+                                    if att.get("type", "").startswith("image/"):
+                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                                    elif att.get("type", "").startswith("video/"):
+                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
+                                    elif att.get("type", "").startswith("audio/"):
+                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+
+                                st.download_button(
+                                    label=f"下载 “{att.get('original_name', '文件')}”",
+                                    data=file_bytes,
+                                    file_name=att.get("original_name", "download"),
+                                    mime=att.get("type") or "application/octet-stream",
+                                    key=f"dl_{post['id']}_{saved_name}",
+                                    type="primary",
+                                )
 
             st.divider()
             col_3, col_4 = st.columns([0.8, 0.2])
-            new_comment = col_3.text_input(
+            new_comment = col_3.text_area(
                 "评论",
                 placeholder="良言一句三冬暖，恶语伤人六月寒",
                 label_visibility="collapsed",
@@ -160,6 +189,7 @@ else:
                 st.page_link(
                     "publish.py",
                     label="发布文章",
+
                 )
                 st.page_link(
                     "user_config.py",
@@ -176,44 +206,23 @@ else:
         selected_tag = st.pills("标签", tags)
 
         # 显示文章列表
-        for _post in reversed(Post.get_all()):
+        for post in reversed(Post.get_all()):
             if selected_tag:
-                if selected_tag not in _post["tags"]:
+                if selected_tag not in post["tags"]:
                     continue
 
             with st.container(border=True):
-                col_1, col_2 = st.columns([0.1, 0.9])
-                col_1.image(
-                    user.get_config(_post["authorid"])["avatar"],
-                    width=55,
-                    link=f"user_config.py?user_id={_post['authorid']}",
-                )
-                col_2.subheader(f"{_post['title']}")
-                if _post["tags"]:
-                    for tag in _post["tags"]:
-                        st.badge(tag)
-                userconfig = user.get_config(_post["authorid"])
-                if userconfig:
-                    st.table(
-                        {
-                            ":material/person: 作者名称": userconfig[
-                                "username"
-                            ],  # NOQA
-                            ":material/person: 作者ID": userconfig["userid"],
-                            ":material/access_time: 发布时间": _post["created_at"],
-                            ":material/info: 文章ID": _post["id"],
-                        },
-                        border="horizontal",
-                        width="content",
-                    )
-                st.text(_post["content"][0:40] + "...")
-                if st.button("查看详细内容", key=_post["id"]):
-                    params["post_id"] = str(_post["id"])
+                basic_information(post)
+                st.text(post["content"][0:40] + "...")
+                if st.button("查看详细内容", key=post["id"]):
+                    params["post_id"] = str(post["id"])
                     st.rerun()
 
-                attachments = _post.get("attachments", [])
+                attachments = post.get("attachments", [])
                 if attachments:
                     st.divider()
+                    attpassword = post.get("attpassword")
+
                     for att in attachments:
                         col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
                         saved_name = att.get("saved_name", "")
@@ -222,13 +231,16 @@ else:
                         )
 
                         if att.get("type", "").startswith("image/"):
-                            b64 = Attachment.get_thumbnail_base64(
-                                saved_name, max_width=200
-                            )
-                            col_a.image(
-                                f"data:image/jpeg;base64,{b64}",  # NOQA
-                                width=60,  # NOQA
-                            )  # NOQA
+                            if not attpassword:
+                                b64 = Attachment.get_thumbnail_base64(
+                                    saved_name, max_width=200
+                                )
+                                col_a.image(
+                                    f"data:image/jpeg;base64,{b64}",  # NOQA
+                                    width=60,  # NOQA
+                                )  # NOQA
+                            else:
+                                col_a.markdown("🖼️")
                         elif att.get("type", "").startswith("video/"):
                             col_a.markdown("🎬")
                         elif att.get("type", "").startswith("audio/"):
