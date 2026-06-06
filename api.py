@@ -343,7 +343,9 @@ class Post:
 
     @staticmethod
     def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
-        return _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
+        return (
+            _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
+        )
 
     @staticmethod
     def get(_id: int) -> dict | None:

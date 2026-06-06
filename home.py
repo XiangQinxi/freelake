@@ -67,9 +67,7 @@ def basic_information(post):
 def preview(att, container, saved_name, auto_preview=True):
     if att.get("type", "").startswith("image/"):
         if not attpassword or not auto_preview:
-            b64 = Attachment.get_thumbnail_base64(
-                saved_name, max_width=200
-            )
+            b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)
             container.image(
                 f"data:image/jpeg;base64,{b64}",  # NOQA
                 width=60,  # NOQA
@@ -85,13 +83,6 @@ def preview(att, container, saved_name, auto_preview=True):
     else:
         container.markdown(":material/insert_drive_file:")
 
-page = ...
-with st.bottom:
-    page = pagination(
-        num_pages=Post.count() // 5 + 1,
-        max_visible_pages=5,
-        key="interactive_pagination",
-    )
 
 if user_id:
     if st.button("返回主页", type="primary"):
@@ -217,7 +208,9 @@ else:
             if post.get("comments"):
                 st.divider()
                 comments = post["comments"]
-                with st.expander(f":material/comment: 评论 ({len(comments)})", expanded=True):
+                with st.expander(
+                    f":material/comment: 评论 ({len(comments)})", expanded=True
+                ):
                     for comment in comments:
                         comment = json.loads(comment)
                         cfg = user.get_config(comment["userid"])
@@ -234,6 +227,14 @@ else:
         else:
             st.warning("文章不存在或已被删除！")
     else:
+        page = ...
+        with st.bottom:
+            page = pagination(
+                num_pages=Post.count() // 5 + 1,
+                max_visible_pages=5,
+                key="interactive_pagination",
+            )
+
         st.text("我构建的简易论坛程序....")
 
         if user.check_by_state():
