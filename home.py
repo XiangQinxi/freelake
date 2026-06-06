@@ -51,7 +51,7 @@ def basic_information(post):
                         st.error("文章删除失败！")
     if post["tags"]:
         for tag in post["tags"]:
-            st.badge(tag, color="orange")
+            st.badge(tag, color="primary")
     st.table(
         {
             ":material/person: 作者名称": user.get_config(post["authorid"])[
@@ -294,7 +294,7 @@ else:
 
                 with st.container(border=True):
                     basic_information(post)
-                    st.text(post["content"][0:40] + "...")
+                    st.markdown(post["content"][0:40] + "...")
                     if st.button("查看详细内容", key=post["id"]):
                         params["post_id"] = str(post["id"])
                         st.rerun()
