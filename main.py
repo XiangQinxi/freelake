@@ -43,7 +43,7 @@ if not user.check_by_state():
 else:
     account_pages.append(publish_page)
     account_pages.append(userconfig_page)
-    if user.get_config(state["userid"])["role"] != admin:
+    if user.get_config(state["userid"]).get("role") != admin:  # NOQA
         account_pages.append(upgrade_page)
     else:
         account_pages.append(admin_page)

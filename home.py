@@ -271,7 +271,6 @@ else:
         else:
             total = Post.count()
 
-        page = ...
         with st.bottom:
             page = pagination(
                 num_pages=max(total // 5 + 1, 1),

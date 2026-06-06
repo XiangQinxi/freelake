@@ -12,8 +12,6 @@ from peewee import *
 from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
 
-from const import admin, user
-
 db = SqliteDatabase("data.db")
 salt = "freelake"
 
@@ -139,9 +137,7 @@ class User:
             return True
         return False
 
-    def modify_role(
-        self, userid: str, secret_key: str, role: typing.Literal[user, admin]
-    ) -> bool:
+    def modify_role(self, userid: str, secret_key: str, role) -> bool:
         """修改用户角色"""
         if self.check_by_state() and secret_key == st.secrets["secret_key"]:
             user = _User.get_or_none(_User.userid == userid)
@@ -212,7 +208,7 @@ class Attachment:
         if img.width > max_width:
             ratio = max_width / img.width
             new_height = int(img.height * ratio)
-            img = img.resize((max_width, new_height), Image.LANCZOS)
+            img = img.resize((max_width, new_height), Image.LANCZOS)  # NOQA
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         return buf.getvalue()
@@ -276,7 +272,7 @@ class Avatar:
             side = min(width, height)
             left = (width - side) // 2
             top = (height - side) // 2
-            img = img.crop((left, top, left + side, top + side))
+            img = img.crop((left, top, left + side, top + side))  # NOQA
         buf = io.BytesIO()
         img.save(buf, format=img.format or "JPEG")
         file_bytes = buf.getvalue()

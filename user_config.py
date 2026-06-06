@@ -31,12 +31,14 @@ if userconfig:
                 "上传新头像", type="image/*", label_visibility="collapsed"
             )
             new_username = st.text_input(
-                "名称", placeholder="请输入用户名称！", value=userconfig["username"]
+                "名称",
+                placeholder="请输入用户名称！",
+                value=userconfig.get("username"),  # NOQA
             )
             new_description = st.text_area(
                 "自我介绍",
                 placeholder="请输入自我介绍！",
-                value=userconfig["description"],
+                value=userconfig.get("description"),  # NOQA
             )
             if st.button("提交"):
                 if not new_username or not new_description:
