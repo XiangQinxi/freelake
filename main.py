@@ -4,6 +4,7 @@ import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from api import User
+from const import admin
 
 state = st.session_state
 
@@ -32,6 +33,7 @@ publish_page = st.Page("publish.py", title="发布文章")
 login_page = st.Page("login.py", title="登录")
 logout_page = st.Page("logout.py", title="退出登录")
 userconfig_page = st.Page("user_config.py", title="用户配置")
+upgrade_page = st.Page("upgrade.py", title="升级管理员")
 
 user = User()
 account_pages = []
@@ -40,6 +42,8 @@ if not user.check_by_state():
 else:
     account_pages.append(publish_page)
     account_pages.append(userconfig_page)
+    if user.get_config(state["userid"])["role"] != admin:
+        account_pages.append(upgrade_page)
     account_pages.append(logout_page)
 
 

@@ -133,6 +133,15 @@ class User:
             return True
         return False
 
+    def modify_role(self, userid: str, secret_key: str, role: typing.Literal["user", "admin"]) -> bool:
+        """修改用户角色"""
+        if self.check_by_state() and secret_key == st.secrets["secret_key"]:
+            user = _User.get_or_none(_User.userid == userid)
+            user.role = role
+            user.save()
+            return True
+        return False
+
     def modify_password(self, userid: str, password: str, new_password: str) -> bool:
         """修改密码"""
         if self.login(userid, password):
