@@ -13,6 +13,7 @@ params = st.query_params
 state = st.session_state
 post_id = params.get("post_id")
 user_id = params.get("user_id")  # 用于查看某人的简介
+search_keyword = params.get("search_keyword", None)
 
 if "attpassword" not in state:
     state["attpassword"] = sha256("")
@@ -248,21 +249,21 @@ else:
         else:
             st.warning("请登录以解锁更多功能！")
 
-        if "search_keyword" not in state:
-            state["search_keyword"] = ""
-
         search_keyword = st.text_input(
             " ",
             placeholder="搜索",
             label_visibility="collapsed",
             icon=":material/search:",
-            value=state["search_keyword"],
+            value=params.get("search_keyword", ""),
         )
-        if search_keyword != state["search_keyword"]:
-            state["search_keyword"] = search_keyword
+        if search_keyword != params.get("search_keyword", ""):
+            if search_keyword:
+                params["search_keyword"] = search_keyword
+            else:
+                del params["search_keyword"]
             st.rerun()
 
-        selected_tag = st.pills("标签", tags)
+        selected_tag = st.pills(":material/filter_alt: 筛选", tags)
 
         if search_keyword:
             total = Post.search_count(search_keyword)
