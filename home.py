@@ -78,7 +78,7 @@ else:
                 attpassword = post.get("attpassword")
 
                 if attpassword and state["attpassword"] != attpassword:
-                    attpwd = st.text_input("专属密码", placeholder="请输入专属密码以查看附件内容！")
+                    attpwd = st.text_input("专属密码", placeholder="请输入专属密码以查看附件内容！", type="password")
                     if st.button("检查", type="primary"):
                         state["attpassword"] = sha256(attpwd)
                         if sha256(attpwd) == attpassword:
@@ -102,16 +102,13 @@ else:
                         file_bytes = Attachment.get_file(saved_name) if saved_name else b""
 
                         if att.get("type", "").startswith("image/"):
-                            if not attpassword:
-                                b64 = Attachment.get_thumbnail_base64(
-                                    saved_name, max_width=200
-                                )
-                                col_a.image(
-                                    f"data:image/jpeg;base64,{b64}",  # NOQA
-                                    width=60,  # NOQA
-                                )  # NOQA
-                            else:
-                                col_a.markdown("🖼️")
+                            b64 = Attachment.get_thumbnail_base64(
+                                saved_name, max_width=200
+                            )
+                            col_a.image(
+                                f"data:image/jpeg;base64,{b64}",  # NOQA
+                                width=60,  # NOQA
+                            )  # NOQA
                         elif att.get("type", "").startswith("video/"):
                             col_a.markdown("🎬")
                         elif att.get("type", "").startswith("audio/"):
