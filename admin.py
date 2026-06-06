@@ -6,6 +6,9 @@ from streamlit_file_browser import st_file_browser
 
 from api import Post, User, execute_sql, sha256
 
+if st.button("返回主页", type="primary"):
+    st.switch_page("home.py")
+
 st.subheader("管理员页面")
 
 original_text = st.text_input("加密文本")
@@ -16,13 +19,17 @@ with st.expander("数据库管理", expanded=True):
     with st.expander("用户管理", expanded=True):
         user = User()
 
-        df = pd.DataFrame(user.get_all())
+        st.metric("用户总数", user.count(), border=True)
+
+        df = pd.DataFrame(user.get_all()).astype(str)
         st.dataframe(df, use_container_width=True)
 
     with st.expander("文章管理", expanded=True):
         post = Post()
 
-        df = pd.DataFrame(post.get_all())
+        st.metric("文章总数", post.count(), border=True)
+
+        df = pd.DataFrame(post.get_all()).astype(str)
         st.dataframe(df, use_container_width=True)
 
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")

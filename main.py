@@ -58,3 +58,6 @@ nav.run()
 
 with st.sidebar:
     pass
+
+with st.bottom:
+    st.caption("© 2026 XiangQinxi · All rights reserved")

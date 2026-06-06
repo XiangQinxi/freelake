@@ -12,7 +12,7 @@ with st.form("Login&Register"):
     userid = st.text_input("用户ID")
     password = st.text_input("密码", type="password")
 
-    register = st.toggle("注册")
+    register = st.checkbox("注册")
 
     if register:
         username = st.text_input("用户名")

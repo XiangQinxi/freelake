@@ -49,7 +49,7 @@ def basic_information(post):
                         st.error("文章删除失败！")
     if post["tags"]:
         for tag in post["tags"]:
-            st.badge(tag)
+            st.badge(tag, color="orange")
     st.table(
         {
             ":material/person: 作者名称": user.get_config(post["authorid"])[
@@ -230,14 +230,20 @@ else:
 
         if user.check_by_state():
             with st.container(border=True):
-                st.page_link(
+                a, b, c, d = st.columns([0.15, 0.15, 0.2, 0.5])
+                a.page_link(
                     "publish.py",
                     label="发布文章",
                 )
-                st.page_link(
+                b.page_link(
                     "user_config.py",
                     label="用户配置",
                 )
+                if user.get_config(state["userid"])["role"] == admin:
+                    c.page_link(
+                        "admin.py",
+                        label="管理员页面",
+                    )
         else:
             st.warning("请登录以解锁更多功能！")
         st.text_input(
