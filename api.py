@@ -106,11 +106,7 @@ class User:
     @staticmethod
     def get_all() -> list[dict[str, str]]:
         """数据整理成`list[dict[str, str]]`"""
-        data = list(_User.select().dicts())
-        for item in data:
-            if isinstance(item.get("created_at"), datetime.datetime):
-                item["created_at"] = item["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-        return data
+        return list(_User.select().dicts())
 
     @staticmethod
     def get_config(userid: str) -> dict[str, str] | None:
@@ -343,11 +339,11 @@ class Post:
     @staticmethod
     def get_all() -> list[dict[str, str]]:
         """数据整理成`list[dict[str, str]]`"""
-        data = list(_Post.select().dicts())
-        for item in data:
-            if isinstance(item.get("created_at"), datetime.datetime):
-                item["created_at"] = item["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-        return data
+        return list(_Post.select().dicts())
+
+    @staticmethod
+    def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
+        return _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
 
     @staticmethod
     def get(_id: int) -> dict | None:

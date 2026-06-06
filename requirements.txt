@@ -1,7 +1,8 @@
 streamlit
 playhouse
 peewee
-streamlit-cookies-manager
 Pillow
-streamlit-file-browser
 pandas
+streamlit-file-browser
+streamlit-extras
+streamlit-cookies-manager

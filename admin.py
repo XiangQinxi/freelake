@@ -6,8 +6,7 @@ from streamlit_file_browser import st_file_browser
 
 from api import Post, User, execute_sql, sha256
 
-if st.button("返回主页", type="primary"):
-    st.switch_page("home.py")
+st.page_link("home.py", label="返回主页")
 
 st.subheader("管理员页面")
 

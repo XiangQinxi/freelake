@@ -3,6 +3,7 @@ import json
 import time
 
 import streamlit as st
+from streamlit_extras.pagination import pagination
 
 from api import Attachment, Post, User, format_size, sha256
 from const import admin, tags
@@ -84,6 +85,13 @@ def preview(att, container, saved_name, auto_preview=True):
     else:
         container.markdown(":material/insert_drive_file:")
 
+page = ...
+with st.bottom:
+    page = pagination(
+        num_pages=Post.count() // 5 + 1,
+        max_visible_pages=5,
+        key="interactive_pagination",
+    )
 
 if user_id:
     if st.button("返回主页", type="primary"):
@@ -255,7 +263,7 @@ else:
         selected_tag = st.pills("标签", tags)
 
         # 显示文章列表
-        for post in reversed(Post.get_all()):
+        for post in Post.get_with_paginate(page, 5):
             if selected_tag:
                 if selected_tag not in post["tags"]:
                     continue
