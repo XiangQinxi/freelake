@@ -2,5 +2,4 @@ streamlit
 playhouse
 peewee
 streamlit-cookies-manager
-
-streamlit-cookies-manager
+Pillow

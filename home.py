@@ -41,7 +41,11 @@ else:
         post = Post.get(int(post_id))
         if post:
             col_1, col_2 = st.columns([0.1, 0.9])
-            col_1.image(user.get_config(post["authorid"])["avatar"], width=55, link=f"user_config.py?user_id={post['authorid']}")
+            col_1.image(
+                user.get_config(post["authorid"])["avatar"],
+                width=55,
+                link=f"user_config.py?user_id={post['authorid']}",
+            )
             col_2.subheader(f"{post['title']}")
             st.table(
                 {
@@ -138,7 +142,11 @@ else:
                         cfg = user.get_config(comment["userid"])
                         if cfg:
                             col_a, col_b = st.columns([0.08, 0.92])
-                            col_a.image(cfg["avatar"], width=40, link=f"user_config.py?user_id={comment['userid']}")
+                            col_a.image(
+                                cfg["avatar"],
+                                width=40,
+                                link=f"user_config.py?user_id={comment['userid']}",
+                            )
                             col_b.markdown(f"**{cfg['username']}** `{cfg['userid']}`")
                             col_b.caption(comment.get("created_at", ""))
                             col_b.markdown(comment["content"])
@@ -158,7 +166,10 @@ else:
         else:
             st.warning("请登录以解锁更多功能！")
         st.text_input(
-            " ", placeholder="搜索", label_visibility="collapsed", icon=":material/search:"
+            " ",
+            placeholder="搜索",
+            label_visibility="collapsed",
+            icon=":material/search:",
         )
         selected_tag = st.pills("标签", tags)
 
@@ -170,7 +181,11 @@ else:
 
             with st.container(border=True):
                 col_1, col_2 = st.columns([0.1, 0.9])
-                col_1.image(user.get_config(_post["authorid"])["avatar"], width=55, link=f"user_config.py?user_id={_post['authorid']}")
+                col_1.image(
+                    user.get_config(_post["authorid"])["avatar"],
+                    width=55,
+                    link=f"user_config.py?user_id={_post['authorid']}",
+                )
                 col_2.subheader(f"{_post['title']}")
                 if _post["tags"]:
                     for tag in _post["tags"]:
@@ -198,12 +213,16 @@ else:
                     for att in attachments:
                         col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
                         saved_name = att.get("saved_name", "")
-                        file_bytes = Attachment.get_file(saved_name) if saved_name else b""
+                        file_bytes = (
+                            Attachment.get_file(saved_name) if saved_name else b""
+                        )
 
                         if att.get("type", "").startswith("image/"):
-                            b64 = base64.b64encode(file_bytes).decode()
+                            b64 = Attachment.get_thumbnail_base64(
+                                saved_name, max_width=200
+                            )
                             col_a.image(
-                                f"data:{att['type']};base64,{b64}",  # NOQA
+                                f"data:image/jpeg;base64,{b64}",  # NOQA
                                 width=60,  # NOQA
                             )  # NOQA
                         elif att.get("type", "").startswith("video/"):

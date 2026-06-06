@@ -1,10 +1,13 @@
 import base64
 import datetime
 import hashlib
+import io
 import json
 import os
 import typing
 import uuid
+
+from PIL import Image
 
 import streamlit as st
 from peewee import *
@@ -178,6 +181,26 @@ class Attachment:
             "size": uploaded_file.size,  # 文件大小（字节）
             "path": unique_name,  # 相对路径（用于读取时拼接）
         }
+
+    @staticmethod
+    def get_thumbnail_bytes(saved_name: str, max_width: int = 300) -> bytes:
+        file_bytes = Attachment.get_file(saved_name)
+        img = Image.open(io.BytesIO(file_bytes))
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        if img.width > max_width:
+            ratio = max_width / img.width
+            new_height = int(img.height * ratio)
+            img = img.resize((max_width, new_height), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return buf.getvalue()
+
+    @staticmethod
+    def get_thumbnail_base64(saved_name: str, max_width: int = 300) -> str:
+        return base64.b64encode(
+            Attachment.get_thumbnail_bytes(saved_name, max_width)
+        ).decode()
 
     @staticmethod
     def get_file(saved_name: str) -> bytes:
