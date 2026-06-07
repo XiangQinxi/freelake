@@ -1,4 +1,5 @@
 import base64
+import urllib.request
 
 import streamlit as st
 from openai import OpenAI
@@ -76,20 +77,25 @@ with st.container(border=True):
                             n=number,
                         )
 
-                if result.data[0].b64_json:
-                    for i in range(number):
-                        img_bytes = base64.b64decode(result.data[0].b64_json)
-                        st.image(img_bytes, use_container_width=True)
-                        ext = output_format or "png"
-                        st.download_button(
-                            label=f"💾 下载图片 {i+1} (.{ext})",
-                            data=img_bytes,
-                            file_name=f"generated_image_{i+1}.{ext}",
-                            mime=f"image/{ext}",
-                        )
-                    st.success("✅ 生成成功！")
-                else:
-                    st.warning("⚠️ 未能获取到图片数据。")
+                for i in range(number):
+                    data = result.data[i]
+                    if data.b64_json:
+                        img_bytes = base64.b64decode(data.b64_json)
+                    elif data.url:
+                        with urllib.request.urlopen(data.url) as resp:
+                            img_bytes = resp.read()
+                    else:
+                        st.warning(f"⚠️ 第 {i + 1} 张图片：未能获取到图片数据。")
+                        continue
+                    st.image(img_bytes, use_container_width=True)
+                    ext = output_format or "png"
+                    st.download_button(
+                        label=f"💾 下载图片 {i + 1} (.{ext})",
+                        data=img_bytes,
+                        file_name=f"generated_image_{i + 1}.{ext}",
+                        mime=f"image/{ext}",
+                    )
+                st.success("✅ 生成成功！")
 
             except Exception as e:
                 st.error(f"❌ 生成失败：{str(e)}")
