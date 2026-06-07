@@ -10,6 +10,38 @@ st.subheader("图片生成")
 
 secrets = st.secrets
 
+
+def get_resolution(ratio: str, scale: float, base: int = 1024) -> str:
+    # 解析宽高比，支持 "a:b" 或 "a/b"
+    if ":" in ratio:
+        a_str, b_str = ratio.split(":")
+    elif "/" in ratio:
+        a_str, b_str = ratio.split("/")
+    else:
+        raise ValueError("宽高比格式错误，请使用 'a:b' 或 'a/b' 的形式")
+
+    # 转换为数值（通常为整数，但也可兼容浮点数）
+    a = float(a_str.strip())
+    b = float(b_str.strip())
+    if b == 0:
+        raise ValueError("宽高比分母不能为零")
+    aspect = a / b
+
+    # 根据横竖屏选择参考边
+    if aspect >= 1:  # 横屏或正方形：以宽度为基准
+        target_width = base * scale
+        target_height = target_width / aspect
+    else:  # 竖屏：以高度为基准
+        target_height = base * scale
+        target_width = target_height * aspect
+
+    # 四舍五入取整（可选择调整到最近的偶数，这里保持直接取整）
+    width = int(round(target_width))
+    height = int(round(target_height))
+
+    return f"{width}x{height}"
+
+
 with st.container(border=True):
     uploaded_image = st.file_uploader(
         "上传图片", type=["png", "jpg", "jpeg"], accept_multiple_files=False
@@ -26,24 +58,31 @@ with st.container(border=True):
 
     quality = st.select_slider(
         "质量 (quality)",
-        options=["low", "medium", "high"],
+        options=["auto", "standard", "low", "medium", "high"],
         value="low",
         help="low 省 token，测试阶段用 low 即可；high 效果最好但贵",
-        key="tab1_quality",
     )
     output_format = st.selectbox(
         "输出格式 (output_format)",
         options=["png", "jpeg", "webp"],
         index=0,
         help="png 支持透明背景，jpeg 体积小",
-        key="tab1_format",
     )
-    size = st.selectbox(
+    size: str = st.selectbox(
         "图片尺寸 (size)",
-        options=["1024x1024", "1024x1536", "1536x1024", "auto"],
+        options=[
+            "1024x1024",
+            "1536x1024",
+            "1024x1536",
+            "2048x2048",
+            "2048x1152",
+            "3840x2160",
+            "2160x3840",
+            "auto",
+        ],
         index=0,
-        key="tab1_size",
     )
+
     number: int = st.number_input("生成数量", min_value=1, max_value=10, value=1)
 
     if st.button("生成图片"):
@@ -65,6 +104,7 @@ with st.container(border=True):
                             quality=quality,
                             output_format=output_format,
                             n=number,
+                            timeout=360,
                         )
                 else:
                     with st.spinner("✏️ 正在编辑图片，请稍候..."):
@@ -75,6 +115,7 @@ with st.container(border=True):
                             size=size,
                             quality=quality,
                             n=number,
+                            timeout=360,
                         )
 
                 for i in range(number):
