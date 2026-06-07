@@ -6,3 +6,4 @@ pandas
 streamlit-file-browser
 streamlit-extras
 streamlit-cookies-manager
+openai
