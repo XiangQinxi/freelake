@@ -57,8 +57,19 @@ class _Post(BaseModel):
     comments = JSONField(default=list)
 
 
+class _Comment(BaseModel):
+    """用于存储评论的表"""
+
+    id = IntegerField()  # 评论ID，文章将记录该ID
+    userid = CharField()
+    content = TextField()
+    created_at = CharField()
+    attachments = JSONField(default=list)
+    attpassword = CharField(max_length=256, default="")
+
+
 db.connect()
-db.create_tables([_User, _Post], safe=True)
+db.create_tables([_User, _Post, _Comment], safe=True)
 
 
 def sha256(value):
@@ -164,6 +175,117 @@ class User:
     @staticmethod
     def count() -> int:
         return _User.select().count()
+
+
+class Post:
+    @staticmethod
+    def publish(
+        authorid: str,
+        title: str,
+        content: str,
+        attachments: typing.List[dict[str, str]],
+        attpassword: str | None = None,
+        tags: typing.List[str] = None,
+    ) -> int:
+        """发布文章"""
+        print(f"{authorid}发布了新文章：{title}")
+        _id = (
+            _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
+        )  # 获取当前最大 ID 并加 1，初始为 1
+        if attpassword:
+            attpassword = sha256(attpassword)
+        else:
+            attpassword = ""
+        _Post.create(
+            id=_id,
+            authorid=authorid,
+            title=title,
+            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            content=content,
+            attachments=attachments,
+            attpassword=attpassword,
+            tags=tags or [],
+        )
+        return _id
+
+    @staticmethod
+    def delete(postid: int) -> bool:
+        """删除文章"""
+        post = Post.get(postid)
+        if post:
+            _Post.delete().where(_Post.id == postid).execute()
+            return True
+        return False
+
+    @staticmethod
+    def get_all() -> list[dict[str, str]]:
+        """数据整理成`list[dict[str, str]]`"""
+        return list(_Post.select().dicts())
+
+    @staticmethod
+    def search(keyword: str) -> list[dict[str, str]]:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .order_by(_Post.id.desc())
+            .dicts()
+        )
+
+    @staticmethod
+    def search_with_paginate(
+        keyword: str, page: int, page_size: int
+    ) -> list[dict[str, str]]:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .order_by(_Post.id.desc())
+            .paginate(page, page_size)
+            .dicts()
+        )
+
+    @staticmethod
+    def search_count(keyword: str) -> int:
+        return (
+            _Post.select()
+            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            .count()
+        )
+
+    @staticmethod
+    def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
+        return (
+            _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
+        )
+
+    @staticmethod
+    def get(_id: int) -> dict | None:
+        return _Post.select().where(_Post.id == _id).dicts().get_or_none()
+
+    @staticmethod
+    def add_comment(
+        postid: int,
+        userid: str,
+        content: str,
+    ) -> None:
+        """添加评论"""
+        _Post.update(
+            comments=fn.json_set(
+                _Post.comments,
+                "$[#]",
+                json.dumps(
+                    {
+                        "userid": userid,
+                        "content": content,
+                        "created_at": datetime.datetime.now().isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        ).where(_Post.id == postid).execute()
+
+    @staticmethod
+    def count() -> int:
+        return _Post.select().count()
 
 
 class Attachment:
@@ -290,117 +412,6 @@ class Avatar:
             "size": uploaded_file.size,  # 文件大小（字节）
             "path": file_path,  # 相对路径（用于读取时拼接）
         }
-
-
-class Post:
-    @staticmethod
-    def publish(
-        authorid: str,
-        title: str,
-        content: str,
-        attachments: typing.List[dict[str, str]],
-        attpassword: str | None = None,
-        tags: typing.List[str] = None,
-    ) -> int:
-        """发布文章"""
-        print(f"{authorid}发布了新文章：{title}")
-        _id = (
-            _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
-        )  # 获取当前最大 ID 并加 1，初始为 1
-        if attpassword:
-            attpassword = sha256(attpassword)
-        else:
-            attpassword = ""
-        _Post.create(
-            id=_id,
-            authorid=authorid,
-            title=title,
-            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            content=content,
-            attachments=attachments,
-            attpassword=attpassword,
-            tags=tags or [],
-        )
-        return _id
-
-    @staticmethod
-    def delete(postid: int) -> bool:
-        """删除文章"""
-        post = Post.get(postid)
-        if post:
-            _Post.delete().where(_Post.id == postid).execute()
-            return True
-        return False
-
-    @staticmethod
-    def get_all() -> list[dict[str, str]]:
-        """数据整理成`list[dict[str, str]]`"""
-        return list(_Post.select().dicts())
-
-    @staticmethod
-    def search(keyword: str) -> list[dict[str, str]]:
-        return (
-            _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
-            .order_by(_Post.id.desc())
-            .dicts()
-        )
-
-    @staticmethod
-    def search_with_paginate(
-        keyword: str, page: int, page_size: int
-    ) -> list[dict[str, str]]:
-        return (
-            _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
-            .order_by(_Post.id.desc())
-            .paginate(page, page_size)
-            .dicts()
-        )
-
-    @staticmethod
-    def search_count(keyword: str) -> int:
-        return (
-            _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
-            .count()
-        )
-
-    @staticmethod
-    def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
-        return (
-            _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
-        )
-
-    @staticmethod
-    def get(_id: int) -> dict | None:
-        return _Post.select().where(_Post.id == _id).dicts().get_or_none()
-
-    @staticmethod
-    def add_comment(
-        postid: int,
-        userid: str,
-        content: str,
-    ) -> None:
-        """添加评论"""
-        _Post.update(
-            comments=fn.json_set(
-                _Post.comments,
-                "$[#]",
-                json.dumps(
-                    {
-                        "userid": userid,
-                        "content": content,
-                        "created_at": datetime.datetime.now().isoformat(),
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-        ).where(_Post.id == postid).execute()
-
-    @staticmethod
-    def count() -> int:
-        return _Post.select().count()
 
 
 def format_size(size_bytes: int) -> str:
