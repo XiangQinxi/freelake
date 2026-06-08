@@ -31,6 +31,7 @@ st.set_page_config(page_icon="logo.ico", layout="centered")
 home_page = st.Page("home.py", title="首页")
 publish_page = st.Page("publish.py", title="发布文章")
 login_page = st.Page("login.py", title="登录")
+register_page = st.Page("register.py", title="注册")
 logout_page = st.Page("logout.py", title="退出登录")
 userconfig_page = st.Page("user_config.py", title="用户配置")
 upgrade_page = st.Page("upgrade.py", title="升级管理员")
@@ -41,6 +42,7 @@ user = User()
 account_pages = []
 if not user.check_by_state():
     account_pages.append(login_page)
+    account_pages.append(register_page)
 else:
     account_pages.append(publish_page)
     account_pages.append(userconfig_page)

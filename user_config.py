@@ -30,6 +30,8 @@ if userconfig:
             new_avatar = st.file_uploader(
                 "上传新头像", type="image/*", label_visibility="collapsed"
             )
+            if new_avatar:
+                st.image(new_avatar, width=250)
             new_username = st.text_input(
                 "名称",
                 placeholder="请输入用户名称！",

@@ -67,7 +67,12 @@ def basic_information(post):
 
 def preview(att, container, saved_name, auto_preview=True):
     if att.get("type", "").startswith("image/"):
-        if not attpassword or not auto_preview:
+        if (
+            not attpassword
+            or not auto_preview
+            or state["attpassword"] == attpassword
+            or state["userid"] == post["authorid"]
+        ):
             b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)
             container.image(
                 f"data:image/jpeg;base64,{b64}",  # NOQA
@@ -123,7 +128,9 @@ else:
 
                 attpassword = post.get("attpassword")
 
-                if attpassword and state["attpassword"] != attpassword:
+                if (attpassword and state["attpassword"] != attpassword) and state[
+                    "userid"
+                ] != post["authorid"]:
                     attpwd = st.text_input(
                         "专属密码",
                         placeholder="请输入专属密码以查看附件内容！",
@@ -162,7 +169,8 @@ else:
                         with col_d.popover("..."):
                             if file_bytes:
                                 if st.toggle(
-                                    f"预览 “{att.get('original_name', '文件')}”"
+                                    f"预览 “{att.get('original_name', '文件')}”",
+                                    key=f"preview_{post['id']}_{saved_name}",
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
