@@ -309,8 +309,8 @@ else:
                     else:
                         st.warning("请输入评论内容！")
 
+            # 评论展示
             if post.get("comments"):
-                st.divider()
                 comments = post["comments"]
                 with st.expander(
                     f":material/comment: 评论 ({len(comments)})", expanded=True
@@ -362,6 +362,7 @@ else:
     else:
         st.text("我构建的简易论坛程序....")
 
+        # region 快捷入口
         if user.check_by_state():
             with st.container(horizontal=True, border=True):
                 st.page_link(
@@ -379,7 +380,9 @@ else:
                     )
         else:
             st.warning("请登录以解锁更多功能！")
+        # endregion
 
+        # region 筛选
         with st.container(border=True):
             search_keyword = st.text_input(
                 " ",
@@ -396,7 +399,9 @@ else:
                 st.rerun()
 
             selected_tag = st.pills(":material/filter_alt: 筛选", tags)
+        # endregion
 
+        # region 分页
         if search_keyword:
             total = Post.search_count(search_keyword)
         else:
@@ -408,6 +413,7 @@ else:
                 max_visible_pages=5,
                 key="interactive_pagination",
             )
+        # endregion
 
         # 显示文章列表
         if total == 0:
@@ -419,9 +425,11 @@ else:
                 posts = Post.get_with_paginate(page, 5)
 
             for post in posts:
+                # 筛选
                 if selected_tag:
                     if selected_tag not in post["tags"]:
                         continue
+                post = Post.get(post["id"])
 
                 with st.container(border=True):
                     basic_information(post)
@@ -429,7 +437,12 @@ else:
                     if st.button("查看详细内容", key=post["id"]):
                         params["post_id"] = str(post["id"])
                         st.rerun()
-
+                    #st.info(post)
+                    if post.get("comments"):
+                        with st.expander("最新一条评论", expanded=True):
+                            last_comment = json.loads(post.get('comments')[-1])
+                            last_comment_user = user.get_config(last_comment["userid"])
+                            st.markdown(f"{last_comment_user['username']}： {last_comment['content']} （{last_comment['created_at']}）")
                     attachments = post.get("attachments", [])
                     if attachments:
                         st.divider()
