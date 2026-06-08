@@ -8,13 +8,17 @@ from api import (
     Attachment,
     Post,
     User,
+    delete_comment_by_id,
+    delete_orphaned_attachments,
+    delete_orphaned_comments,
     execute_sql,
     format_size,
     get_all_attachments,
     get_attachment_stats,
     get_comment_summary,
     get_orphaned_attachments,
-    delete_orphaned_attachments,
+    get_orphaned_comments,
+    search_comments,
     sha256,
 )
 
@@ -165,26 +169,80 @@ with st.expander("文章管理", expanded=True):
                 st.rerun()
 
     with st.container(border=True):
-        st.caption("评论管理")
-        comments_df = pd.DataFrame(get_comment_summary()).astype(str)
-        st.dataframe(comments_df, use_container_width=True)
-        col_a, col_b, col_c = st.columns(3, vertical_alignment="bottom")
-        c_post_id = col_a.text_input("文章 ID", key="comment_postid")
-        c_index = col_b.text_input("评论索引", key="comment_index")
-        if col_c.button("删除评论", type="primary", key="del_comment_btn"):
-            if c_post_id and c_index:
-                try:
-                    if post.delete_comment(int(c_post_id), int(c_index)):
-                        st.success("评论已删除")
-                        st.rerun()
-                    else:
-                        st.error("删除失败：请检查文章 ID 和评论索引是否正确")
-                except ValueError:
-                    st.error("文章 ID 和评论索引必须是数字")
-                except Exception as e:
-                    st.error(f"删除失败：{e}")
+        st.caption("评论")
+        st.info("查看下方独立的「评论管理」面板")
+
+with st.expander("评论管理", expanded=True):
+    st.metric("评论总数", len(get_comment_summary()), border=True)
+
+    tab1, tab2, tab3 = st.tabs(["全部评论", "搜索评论", "孤立评论清理"])
+
+    with tab1:
+        df = pd.DataFrame(get_comment_summary()).astype(str)
+        st.dataframe(df, use_container_width=True)
+
+        with st.container(border=True):
+            col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
+            del_cid = col_a.text_input("按 comment_id 删除", placeholder="输入评论 ID")
+            if col_b.button("删除评论", type="primary", key="del_comment_by_id"):
+                if del_cid:
+                    st.session_state["del_comment_confirm_id"] = int(del_cid)
+                else:
+                    st.warning("请输入评论 ID")
+            confirm_cid = st.session_state.get("del_comment_confirm_id")
+            if confirm_cid:
+                st.warning(f"确定要删除评论 #{confirm_cid} 吗？")
+                col_x, col_y = st.columns(2)
+                if col_x.button("确认删除", type="primary", key="confirm_del_comment"):
+                    try:
+                        if delete_comment_by_id(confirm_cid):
+                            st.success(f"评论 #{confirm_cid} 已删除")
+                            del st.session_state["del_comment_confirm_id"]
+                            st.rerun()
+                        else:
+                            st.error(f"评论 #{confirm_cid} 不存在")
+                            del st.session_state["del_comment_confirm_id"]
+                    except Exception as e:
+                        st.error(f"删除失败：{e}")
+                        del st.session_state["del_comment_confirm_id"]
+                if col_y.button("取消", key="cancel_del_comment"):
+                    del st.session_state["del_comment_confirm_id"]
+                    st.rerun()
+
+    with tab2:
+        col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
+        keyword = col_a.text_input(
+            "关键词", placeholder="按内容或用户 ID 搜索", key="comment_search_kw"
+        )
+        if col_b.button("搜索", key="search_comment_btn"):
+            if keyword:
+                result = search_comments(keyword)
+                if result:
+                    st.dataframe(
+                        pd.DataFrame(result).astype(str), use_container_width=True
+                    )
+                else:
+                    st.info("未找到匹配的评论")
             else:
-                st.warning("请填写文章 ID 和评论索引")
+                st.warning("请输入关键词")
+
+    with tab3:
+        orphans = get_orphaned_comments()
+        col_a, col_b = st.columns([0.7, 0.3])
+        col_a.metric("孤立评论数", len(orphans), border=True)
+        if col_b.button("清理孤立评论", type="primary"):
+            if orphans:
+                deleted = delete_orphaned_comments()
+                st.success(f"已清理 {deleted} 条孤立评论")
+                st.rerun()
+            else:
+                st.info("没有需要清理的孤立评论")
+        if orphans:
+            with st.container(border=True):
+                st.caption("孤立评论列表（所属文章已被删除）")
+                st.dataframe(
+                    pd.DataFrame(orphans).astype(str), use_container_width=True
+                )
 
 with st.expander("附件管理", expanded=True):
     all_attachments = get_all_attachments()

@@ -12,6 +12,7 @@ import streamlit as st
 from peewee import *
 from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
+from const import admin, user
 
 db = SqliteDatabase("data.db")
 salt = "freelake"
@@ -80,7 +81,8 @@ class _Post(BaseModel):
 class _Comment(BaseModel):
     """用于存储评论的表"""
 
-    id = IntegerField()  # 评论ID，文章将记录该ID
+    id = IntegerField()
+    postid = IntegerField()
     userid = CharField()
     content = TextField()
     created_at = CharField()
@@ -90,6 +92,31 @@ class _Comment(BaseModel):
 
 db.connect()
 db.create_tables([_User, _Post, _Comment], safe=True)
+
+# 迁移：为 _Comment 表添加 postid 列（兼容旧表结构）
+try:
+    db.execute_sql("ALTER TABLE _comment ADD COLUMN postid INTEGER NOT NULL DEFAULT 0")
+except Exception:
+    pass
+
+# 迁移：将旧版 JSON 字符串评论转换为 _Comment 记录
+for post in _Post.select():
+    comments = post.comments or []
+    if comments and isinstance(comments[0], str):
+        new_ids = []
+        for comment_json in comments:
+            data = json.loads(comment_json)
+            cid = _Comment.select(fn.MAX(_Comment.id) + 1).scalar() or 1
+            _Comment.create(
+                id=cid,
+                postid=post.id,
+                userid=data["userid"],
+                content=data["content"],
+                created_at=data.get("created_at", ""),
+            )
+            new_ids.append(cid)
+        post.comments = new_ids
+        post.save()
 
 
 def sha256(value):
@@ -103,7 +130,7 @@ class User:
         userid: str,
         username: str,
         password: str,
-        role: typing.Literal["user", "admin"] = "user",
+        role: str = user,
     ) -> bool:
         """注册账号，如果成功则返回`True`"""
         if not self.exists(userid):  # 避免重复用户ID
@@ -245,9 +272,10 @@ class Post:
 
     @staticmethod
     def delete(postid: int) -> bool:
-        """删除文章"""
-        post = Post.get(postid)
+        """删除文章（同时删除关联的评论）"""
+        post = _Post.get_or_none(_Post.id == postid)
         if post:
+            _Comment.delete().where(_Comment.postid == postid).execute()
             _Post.delete().where(_Post.id == postid).execute()
             return True
         return False
@@ -306,35 +334,62 @@ class Post:
 
     @staticmethod
     def get(_id: int) -> dict | None:
-        return _Post.select().where(_Post.id == _id).dicts().get_or_none()
+        post = _Post.select().where(_Post.id == _id).dicts().get_or_none()
+        if not post:
+            return None
+        comments = []
+        valid_ids = []
+        for cid in post.get("comments") or []:
+            comment = _Comment.select().where(_Comment.id == cid).dicts().get_or_none()
+            if comment:
+                comments.append(
+                    json.dumps(
+                        {
+                            "userid": comment["userid"],
+                            "content": comment["content"],
+                            "created_at": comment["created_at"],
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                valid_ids.append(cid)
+        if len(valid_ids) != len(post.get("comments") or []):
+            post_obj = _Post.get_or_none(_Post.id == _id)
+            if post_obj:
+                post_obj.comments = valid_ids
+                post_obj.save()
+        post["comments"] = comments
+        return post
 
     @staticmethod
     def add_comment(
         postid: int,
         userid: str,
         content: str,
-    ) -> None:
-        """添加评论"""
-        _Post.update(
-            comments=fn.json_set(
-                _Post.comments,
-                "$[#]",
-                json.dumps(
-                    {
-                        "userid": userid,
-                        "content": content,
-                        "created_at": datetime.datetime.now().isoformat(),
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-        ).where(_Post.id == postid).execute()
+    ) -> int | None:
+        """添加评论，返回评论 ID"""
+        cid = _Comment.select(fn.MAX(_Comment.id) + 1).scalar() or 1
+        _Comment.create(
+            id=cid,
+            postid=postid,
+            userid=userid,
+            content=content,
+            created_at=datetime.datetime.now().isoformat(),
+        )
+        post = _Post.get_or_none(_Post.id == postid)
+        if post:
+            post.comments = (post.comments or []) + [cid]
+            post.save()
+            return cid
+        return None
 
     @staticmethod
     def delete_comment(postid: int, comment_index: int) -> bool:
         """删除评论"""
         post = _Post.get_or_none(_Post.id == postid)
         if post and 0 <= comment_index < len(post.comments):
+            cid = post.comments[comment_index]
+            _Comment.delete().where(_Comment.id == cid).execute()
             del post.comments[comment_index]
             post.save()
             return True
@@ -540,17 +595,67 @@ def delete_orphaned_attachments() -> int:
 def get_comment_summary() -> list[dict]:
     """获取所有评论的摘要（含所属文章）"""
     result = []
-    for post in _Post.select().dicts():
-        for i, comment_raw in enumerate(post.get("comments") or []):
-            comment = json.loads(comment_raw)
-            result.append(
-                {
-                    "post_id": post["id"],
-                    "post_title": post["title"],
-                    "comment_index": i,
-                    "userid": comment.get("userid"),
-                    "content": comment.get("content"),
-                    "created_at": comment.get("created_at"),
-                }
-            )
+    for comment in _Comment.select().dicts():
+        post = _Post.get_or_none(_Post.id == comment["postid"])
+        post_comments = post.comments if post else []
+        try:
+            comment_index = post_comments.index(comment["id"])
+        except ValueError:
+            comment_index = -1
+        result.append(
+            {
+                "comment_id": comment["id"],
+                "post_id": comment["postid"],
+                "post_title": post.title if post else "(已删除)",
+                "comment_index": comment_index,
+                "userid": comment["userid"],
+                "content": comment["content"],
+                "created_at": comment["created_at"],
+            }
+        )
     return result
+
+
+def delete_comment_by_id(comment_id: int) -> bool:
+    """按 comment_id 删除评论，同时从所属文章的 comments 列表中移除"""
+    comment = _Comment.get_or_none(_Comment.id == comment_id)
+    if not comment:
+        return False
+    post = _Post.get_or_none(_Post.id == comment.postid)
+    if post and post.comments:
+        try:
+            post.comments.remove(comment_id)
+            post.save()
+        except ValueError:
+            pass
+    comment.delete_instance()
+    return True
+
+
+def search_comments(keyword: str) -> list[dict]:
+    """按内容或用户ID搜索评论"""
+    return list(
+        _Comment.select()
+        .where(
+            (_Comment.content.contains(keyword)) | (_Comment.userid.contains(keyword))
+        )
+        .order_by(_Comment.id.desc())
+        .dicts()
+    )
+
+
+def get_orphaned_comments() -> list[dict]:
+    """找出所属文章已被删除的孤立评论"""
+    result = []
+    for comment in _Comment.select().dicts():
+        if not _Post.get_or_none(_Post.id == comment["postid"]):
+            result.append(comment)
+    return result
+
+
+def delete_orphaned_comments() -> int:
+    """删除所有孤立评论，返回删除数量"""
+    orphans = get_orphaned_comments()
+    for c in orphans:
+        _Comment.delete().where(_Comment.id == c["id"]).execute()
+    return len(orphans)
