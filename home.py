@@ -195,6 +195,27 @@ else:
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                     st.divider()
                     st.caption("📎 附件")
+
+                    zip_buffer = io.BytesIO()
+                    with ZipFile(zip_buffer, "w") as zf:
+                        for att in attachments:
+                            saved_name = att.get("saved_name", "")
+                            file_bytes = (
+                                Attachment.get_file(saved_name) if saved_name else b""
+                            )
+                            if file_bytes:
+                                zf.writestr(
+                                    att.get("original_name", "download"), file_bytes
+                                )
+                    st.download_button(
+                        label=":material/folder_zip: 下载所有附件 (ZIP)",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"{post['title']}-{post['authorid']}.zip",
+                        mime="application/zip",
+                        key=f"dl_all_{post['id']}",
+                        type="primary",
+                    )
+
                     for att in attachments:
                         col_a, col_b, col_c, col_d = st.columns(
                             [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
@@ -230,25 +251,6 @@ else:
                                     key=f"dl_{post['id']}_{saved_name}",
                                     type="primary",
                                 )
-                    zip_buffer = io.BytesIO()
-                    with ZipFile(zip_buffer, "w") as zf:
-                        for att in attachments:
-                            saved_name = att.get("saved_name", "")
-                            file_bytes = (
-                                Attachment.get_file(saved_name) if saved_name else b""
-                            )
-                            if file_bytes:
-                                zf.writestr(
-                                    att.get("original_name", "download"), file_bytes
-                                )
-                    st.download_button(
-                        label=":material/folder_zip: 下载所有附件 (ZIP)",
-                        data=zip_buffer.getvalue(),
-                        file_name=f"attachments_{post_id}.zip",
-                        mime="application/zip",
-                        key=f"dl_all_{post['id']}",
-                        type="primary",
-                    )
 
             st.divider()
             col_3, col_4 = st.columns([0.8, 0.2])
