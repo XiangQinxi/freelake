@@ -1,6 +1,8 @@
 import base64
+import io
 import json
 import time
+from zipfile import ZipFile
 
 import streamlit as st
 from streamlit_extras.pagination import pagination
@@ -30,7 +32,7 @@ if "attpassword" not in state:
 
 
 @st.dialog("编辑该文章")
-def edit(post):
+def edit_post(post):
     new_title = st.text_input(
         "文章标题",
         placeholder="请输入标题",
@@ -69,7 +71,6 @@ def basic_information(post):
     )
     col_2.subheader(f"{post['title']}")
     if user.check_by_state():
-
         if (
             post["authorid"] == state["userid"] or userconfig["role"] == admin
         ):  # 只有作者或管理员才能操作
@@ -82,7 +83,7 @@ def basic_information(post):
             )
             match action:
                 case ":material/edit: 编辑":
-                    edit(post)
+                    edit_post(post)
                 case ":material/delete: 删除":
                     if Post.delete(post["id"]):
                         st.success("文章删除成功！")
@@ -95,9 +96,7 @@ def basic_information(post):
             st.badge(tag, color="primary")
     st.table(
         {
-            ":material/person: 作者名称": user.get_config(post["authorid"])[
-                "username"
-            ],  # NOQA
+            ":material/person: 作者名称": user.get_config(post["authorid"])["username"],  # NOQA
             ":material/access_time: 发布时间": post["created_at"],
             ":material/info: 文章ID": post["id"],
         },
@@ -194,7 +193,7 @@ else:
                         b64 = base64.b64encode(file_bytes).decode()
                         if att.get("type", "").startswith("image/"):
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
-
+                    st.divider()
                     st.caption("📎 附件")
                     for att in attachments:
                         col_a, col_b, col_c, col_d = st.columns(
@@ -217,17 +216,11 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",
@@ -237,6 +230,25 @@ else:
                                     key=f"dl_{post['id']}_{saved_name}",
                                     type="primary",
                                 )
+                    zip_buffer = io.BytesIO()
+                    with ZipFile(zip_buffer, "w") as zf:
+                        for att in attachments:
+                            saved_name = att.get("saved_name", "")
+                            file_bytes = (
+                                Attachment.get_file(saved_name) if saved_name else b""
+                            )
+                            if file_bytes:
+                                zf.writestr(
+                                    att.get("original_name", "download"), file_bytes
+                                )
+                    st.download_button(
+                        label=":material/folder_zip: 下载所有附件 (ZIP)",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"attachments_{post_id}.zip",
+                        mime="application/zip",
+                        key=f"dl_all_{post['id']}",
+                        type="primary",
+                    )
 
             st.divider()
             col_3, col_4 = st.columns([0.8, 0.2])
@@ -263,19 +275,39 @@ else:
                 with st.expander(
                     f":material/comment: 评论 ({len(comments)})", expanded=True
                 ):
-                    for comment in comments:
+                    for index, comment in enumerate(comments):
                         comment = json.loads(comment)
                         cfg = user.get_config(comment["userid"])
                         if cfg:
-                            col_a, col_b = st.columns([0.08, 0.92])
+                            col_a, col_b, col_c = st.columns([0.08, 0.82, 0.1], vertical_alignment="top")
                             col_a.image(
                                 cfg["avatar"],
                                 width=40,
                                 link=f"user_config.py?user_id={comment['userid']}",
                             )
-                            col_b.markdown(f"**{cfg['username']}** `{cfg['userid']}`")
+                            col_b.markdown(f"**{cfg['username']}**")
                             col_b.caption(comment.get("created_at", ""))
                             col_b.markdown(comment["content"])
+                            if user.check_by_state():
+                                if userconfig.get("userid") == comment["userid"] or userconfig.get("role") == admin:
+                                    action = col_c.menu_button(
+                                        "",
+                                        options=[":material/edit: 编辑",
+                                                 ":material/delete: 删除"],
+                                        icon=":material/more_vert:",
+                                        key=f"comment{index}.menu",
+                                        type="tertiary",
+                                    )
+                                    match action:
+                                        case ":material/edit: 编辑":
+                                            pass
+                                        case ":material/delete: 删除":
+                                            if Post.delete_comment(int(post_id), index):
+                                                st.success("评论删除成功！")
+                                                time.sleep(2)
+                                                st.rerun()
+                                            else:
+                                                st.error("评论删除失败！")
         else:
             st.warning("文章不存在或已被删除！")
     else:

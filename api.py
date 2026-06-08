@@ -316,6 +316,16 @@ class Post:
         ).where(_Post.id == postid).execute()
 
     @staticmethod
+    def delete_comment(postid: int, comment_index: int) -> bool:
+        """删除评论"""
+        post = _Post.get_or_none(_Post.id == postid)
+        if post and 0 <= comment_index < len(post.comments):
+            del post.comments[comment_index]
+            post.save()
+            return True
+        return False
+
+    @staticmethod
     def count() -> int:
         return _Post.select().count()
 
