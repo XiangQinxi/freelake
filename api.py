@@ -196,6 +196,14 @@ class User:
     def count() -> int:
         return _User.select().count()
 
+    @staticmethod
+    def delete_user(userid: str) -> bool:
+        user = _User.get_or_none(_User.userid == userid)
+        if user:
+            user.delete_instance()
+            return True
+        return False
+
 
 class Post:
     @staticmethod
@@ -467,3 +475,70 @@ class Config:
     def save(self):
         with open("config.toml", "w+", encoding="utf-8") as f:
             toml.dump(self.config, f)
+
+
+# --- Admin utilities ---
+
+
+def get_attachment_stats() -> dict:
+    """获取所有附件的统计信息（总数/总大小）"""
+    total_count = 0
+    total_size = 0
+    for post in _Post.select().dicts():
+        for att in post.get("attachments") or []:
+            total_count += 1
+            total_size += att.get("size", 0)
+    return {"count": total_count, "total_size": total_size}
+
+
+def get_all_attachments() -> list[dict]:
+    """获取所有附件及其所属文章信息"""
+    result = []
+    for post in _Post.select().dicts():
+        for att in post.get("attachments") or []:
+            result.append({**att, "post_id": post["id"], "post_title": post["title"]})
+    return result
+
+
+def get_orphaned_attachments() -> list[str]:
+    """找出 attachments 目录中未被任何文章引用的孤立文件"""
+    referenced = set()
+    for post in _Post.select().dicts():
+        for att in post.get("attachments") or []:
+            saved = att.get("saved_name")
+            if saved:
+                referenced.add(saved)
+    all_files = set(os.listdir(ATTACHMENTS_DIR))
+    orphans = [
+        f
+        for f in all_files
+        if f not in referenced and os.path.isfile(os.path.join(ATTACHMENTS_DIR, f))
+    ]
+    return orphans
+
+
+def delete_orphaned_attachments() -> int:
+    """删除所有孤立附件，返回删除数量"""
+    orphans = get_orphaned_attachments()
+    for f in orphans:
+        os.remove(os.path.join(ATTACHMENTS_DIR, f))
+    return len(orphans)
+
+
+def get_comment_summary() -> list[dict]:
+    """获取所有评论的摘要（含所属文章）"""
+    result = []
+    for post in _Post.select().dicts():
+        for i, comment_raw in enumerate(post.get("comments") or []):
+            comment = json.loads(comment_raw)
+            result.append(
+                {
+                    "post_id": post["id"],
+                    "post_title": post["title"],
+                    "comment_index": i,
+                    "userid": comment.get("userid"),
+                    "content": comment.get("content"),
+                    "created_at": comment.get("created_at"),
+                }
+            )
+    return result
