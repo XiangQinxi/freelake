@@ -31,6 +31,7 @@ if "attpassword" not in state:
     state["attpassword"] = sha256("")
 
 
+# region 对话框
 @st.dialog("确认删除")
 def confirm_delete_post(post_id):
     st.warning("确定要删除这篇文章吗？此操作不可撤销！")
@@ -75,8 +76,10 @@ def edit_post(post):
                 st.rerun()
             else:
                 st.error("文章修改失败！")
+# endregion
 
 
+# region 常用方法
 def basic_information(post):
     col_1, col_2, col_3 = st.columns([0.1, 0.8, 0.1])
     col_1.image(
@@ -141,8 +144,10 @@ def preview(att, container, saved_name, auto_preview=True):
         container.markdown(":material/insert_drive_file:")
     else:
         container.markdown(":material/insert_drive_file:")
+# endregion
 
 
+# region 用户信息查询
 if user_id:
     if st.button("返回主页", type="primary"):
         del st.query_params["user_id"]
@@ -163,7 +168,9 @@ if user_id:
         )
     else:
         st.error("该用户不存在！")
+# endregion
 else:
+    # region 文章信息查询
     if post_id:
         if st.button("返回主页", type="primary"):
             del st.query_params["post_id"]
@@ -350,22 +357,23 @@ else:
                                                 st.error("评论删除失败！")
         else:
             st.warning("文章不存在或已被删除！")
+    # endregion
+    # region 主页显示
     else:
         st.text("我构建的简易论坛程序....")
 
         if user.check_by_state():
-            with st.container(border=True):
-                a, b, c, d = st.columns([0.15, 0.15, 0.2, 0.5])
-                a.page_link(
+            with st.container(horizontal=True, border=True):
+                st.page_link(
                     "publish.py",
                     label="发布文章",
                 )
-                b.page_link(
+                st.page_link(
                     "user_config.py",
                     label="用户配置",
                 )
                 if user.get_config(state["userid"])["role"] == admin:
-                    c.page_link(
+                    st.page_link(
                         "admin.py",
                         label="管理员页面",
                     )
@@ -439,3 +447,4 @@ else:
 
                             col_b.write(f"**{att.get('original_name', '未命名')}**")
                             col_c.write(f"{format_size(att.get('size', 0))}")
+    # endregion

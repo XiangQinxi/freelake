@@ -44,7 +44,7 @@ def execute_sql(query: str) -> list[dict[str, str]]:
     """执行SQL查询"""
     return list(db.execute(query).dicts())
 
-
+# region 数据库模型
 class BaseModel(Model):
     class Meta:
         database = db
@@ -89,42 +89,18 @@ class _Comment(BaseModel):
     created_at = CharField()
     attachments = JSONField(default=list)
     attpassword = CharField(max_length=256, default="")
+# endregion
 
 
 db.connect()
 db.create_tables([_User, _Post, _Comment], safe=True)
-
-# 迁移：为 _Comment 表添加 postid 列（兼容旧表结构）
-try:
-    db.execute_sql("ALTER TABLE _comment ADD COLUMN postid INTEGER NOT NULL DEFAULT 0")
-except Exception:
-    pass
-
-# 迁移：将旧版 JSON 字符串评论转换为 _Comment 记录
-for post in _Post.select():
-    comments = post.comments or []
-    if comments and isinstance(comments[0], str):
-        new_ids = []
-        for comment_json in comments:
-            data = json.loads(comment_json)
-            cid = _Comment.select(fn.MAX(_Comment.id) + 1).scalar() or 1
-            _Comment.create(
-                id=cid,
-                postid=post.id,
-                userid=data["userid"],
-                content=data["content"],
-                created_at=data.get("created_at", ""),
-            )
-            new_ids.append(cid)
-        post.comments = new_ids
-        post.save()
-
 
 def sha256(value):
     """获取哈希加密加盐后的文本"""
     return hashlib.sha256((value + salt).encode()).hexdigest()
 
 
+# region 数据库接口
 class User:
     def register(
         self,
@@ -530,6 +506,7 @@ class Avatar:
             "size": uploaded_file.size,  # 文件大小（字节）
             "path": file_path,  # 相对路径（用于读取时拼接）
         }
+# endregion
 
 
 class Config:
@@ -545,9 +522,7 @@ class Config:
             toml.dump(self.config, f)
 
 
-# --- Admin utilities ---
-
-
+# region 管理员工具
 def get_attachment_stats() -> dict:
     """获取所有附件的统计信息（总数/总大小）"""
     total_count = 0
@@ -660,3 +635,4 @@ def delete_orphaned_comments() -> int:
     for c in orphans:
         _Comment.delete().where(_Comment.id == c["id"]).execute()
     return len(orphans)
+# endregion

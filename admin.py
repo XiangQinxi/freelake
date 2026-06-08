@@ -26,6 +26,7 @@ st.page_link("home.py", label="返回主页")
 
 st.subheader("管理员页面")
 
+# region 统计概览
 with st.expander("统计概览", expanded=True):
     user = User()
     stats = get_attachment_stats()
@@ -36,7 +37,9 @@ with st.expander("统计概览", expanded=True):
     col3.metric("评论总数", len(all_comments))
     col4.metric("附件总数", stats["count"])
     col5.metric("附件总大小", format_size(stats["total_size"]))
+# endregion
 
+# region 用户管理
 with st.expander("用户管理", expanded=True):
     user = User()
 
@@ -102,7 +105,9 @@ with st.expander("用户管理", expanded=True):
             if col_y.button("取消", key="cancel_del_user"):
                 del st.session_state["del_user_confirm"]
                 st.rerun()
+# endregion
 
+# region 文章管理
 with st.expander("文章管理", expanded=True):
     post = Post()
 
@@ -171,7 +176,9 @@ with st.expander("文章管理", expanded=True):
     with st.container(border=True):
         st.caption("评论")
         st.info("查看下方独立的「评论管理」面板")
+# endregion
 
+# region 评论管理
 with st.expander("评论管理", expanded=True):
     st.metric("评论总数", len(get_comment_summary()), border=True)
 
@@ -243,7 +250,9 @@ with st.expander("评论管理", expanded=True):
                 st.dataframe(
                     pd.DataFrame(orphans).astype(str), use_container_width=True
                 )
+# endregion
 
+# region 附件管理
 with st.expander("附件管理", expanded=True):
     all_attachments = get_all_attachments()
     st.metric("附件总数", len(all_attachments), border=True)
@@ -269,7 +278,9 @@ with st.expander("附件管理", expanded=True):
                 fp = os.path.join("attachments", f)
                 size = os.path.getsize(os.path.join(os.path.dirname(__file__), fp))
                 st.text(f"{f} ({format_size(size)})")
+# endregion
 
+# region 系统工具
 with st.expander("系统工具", expanded=False):
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
     query = col1.text_input("请输入SQL查询语句", placeholder="例如：SELECT * FROM user")
@@ -293,7 +304,9 @@ with st.expander("系统工具", expanded=False):
         db_path = os.path.join(os.path.dirname(__file__), "data.db")
         if os.path.exists(db_path):
             st.metric("数据库大小", format_size(os.path.getsize(db_path)), border=True)
+# endregion
 
+# region 文件管理
 with st.expander("文件管理", expanded=True):
     event = st_file_browser(
         os.path.dirname(os.path.abspath(__file__)),
@@ -305,3 +318,4 @@ with st.expander("文件管理", expanded=True):
         show_upload_file=True,
     )
     st.write(event)
+# endregion
