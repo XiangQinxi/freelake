@@ -218,6 +218,18 @@ class Post:
         return False
 
     @staticmethod
+    def edit(postid: int, title: str, content: str, tags: typing.List[str] = None):
+        """编辑文章"""
+        post = _Post.get_or_none(_Post.id == postid)
+        if post:
+            post.title = title
+            post.content = content
+            post.tags = tags or []
+            post.save()
+            return True
+        return False
+
+    @staticmethod
     def get_all() -> list[dict[str, str]]:
         """数据整理成`list[dict[str, str]]`"""
         return list(_Post.select().dicts())

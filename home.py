@@ -19,6 +19,32 @@ if "attpassword" not in state:
     state["attpassword"] = sha256("")
 
 
+@st.dialog("编辑该文章")
+def edit(post):
+    new_title = st.text_input(
+        "文章标题", placeholder="请输入标题", value=post["title"], label_visibility="collapsed"
+    )
+    new_content = st.text_area(
+        "文章内容",
+        placeholder="请输入内容",
+        value=post["content"],
+        label_visibility="collapsed",
+    )
+    new_tags = st.multiselect("标签", tags, default=post["tags"], accept_new_options=False)
+    if st.button("提交修改"):
+        if not new_title:
+            st.error("请输入标题！")
+        elif not new_content:
+            st.error("请输入内容！")
+        else:
+            if Post.edit(post["id"], new_title, new_content, new_tags):
+                st.success("文章修改成功！")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("文章修改失败！")
+
+
 def basic_information(post):
     col_1, col_2, col_3 = st.columns([0.1, 0.8, 0.1])
     col_1.image(
@@ -41,7 +67,7 @@ def basic_information(post):
             )
             match action:
                 case ":material/edit: 编辑":
-                    pass
+                    edit(post)
                 case ":material/delete: 删除":
                     if Post.delete(post["id"]):
                         st.success("文章删除成功！")
