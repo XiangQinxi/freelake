@@ -6,6 +6,7 @@ import json
 import os
 import typing
 import uuid
+import toml
 
 import streamlit as st
 from peewee import *
@@ -16,11 +17,30 @@ db = SqliteDatabase("data.db")
 salt = "freelake"
 
 # 附件存储目录（在项目根目录下创建 attachments 文件夹）
-ATTACHMENTS_DIR = os.path.join(os.path.dirname(__file__), "attachments")  # NOQA
-AVATARS_DIR = os.path.join(os.path.dirname(__file__), "avatars")  # NOQA
+DIR = os.path.dirname(__file__)
+ATTACHMENTS_DIR = os.path.join(DIR, "attachments")  # NOQA
+ATTACHMENTS_DIR = os.path.join(DIR, "attachments")  # NOQA
+AVATARS_DIR = os.path.join(DIR, "avatars")  # NOQA
 
 os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 os.makedirs(AVATARS_DIR, exist_ok=True)
+
+
+def format_size(size_bytes: int) -> str:
+    """将字节数转换为人类可读的文件大小格式"""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / 1024 / 1024:.1f} MB"
+    else:
+        return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
+
+
+def execute_sql(query: str) -> list[dict[str, str]]:
+    """执行SQL查询"""
+    return list(db.execute(query).dicts())
 
 
 class BaseModel(Model):
@@ -426,18 +446,14 @@ class Avatar:
         }
 
 
-def format_size(size_bytes: int) -> str:
-    """将字节数转换为人类可读的文件大小格式"""
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / 1024 / 1024:.1f} MB"
-    else:
-        return f"{size_bytes / 1024 / 1024 / 1024:.1f} GB"
+class Config:
+    def __init__(self):
+        self.load()
 
+    def load(self):
+        with open("config.toml", "r+", encoding="utf-8") as f:
+            self.config = toml.load(f)
 
-def execute_sql(query: str) -> list[dict[str, str]]:
-    """执行SQL查询"""
-    return list(db.execute(query).dicts())
+    def save(self):
+        with open("config.toml", "w+", encoding="utf-8") as f:
+            toml.dump(self.config, f)
