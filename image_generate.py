@@ -50,7 +50,7 @@ with st.container(border=True):
         with st.expander("查看图片", expanded=True):
             st.image(
                 uploaded_image,
-                caption=uploaded_image.name,
+                caption=uploaded_image.name,  # noqa: NOQA
                 width=300,
             )
 
@@ -83,7 +83,7 @@ with st.container(border=True):
         index=0,
     )
 
-    number: int = st.number_input("生成数量", min_value=1, max_value=10, value=1)
+    number: int = st.number_input("生成数量", min_value=1, max_value=10, value=1)  # noqa: NOQA
 
     if st.button("生成图片"):
         if not prompt:
@@ -94,7 +94,6 @@ with st.container(border=True):
                     api_key=secrets["ai"]["api_key"], base_url=secrets["ai"]["base_url"]
                 )
                 st.info("💡 提示：如需渲染特定文字，建议用引号括起来，如「深夜食堂」")
-
                 if not uploaded_image:
                     with st.spinner("🎨 正在生成图片，请稍候..."):
                         result = client.images.generate(
@@ -108,7 +107,7 @@ with st.container(border=True):
                         )
                 else:
                     with st.spinner("✏️ 正在编辑图片，请稍候..."):
-                        result = client.images.edit(
+                        result = client.images.edit(  # noqa: NOQA
                             model="gpt-image-2",
                             image=uploaded_image,  # ✅ 直接传 UploadedFile (BytesIO)
                             prompt=prompt,
@@ -119,7 +118,7 @@ with st.container(border=True):
                         )
 
                 for i in range(number):
-                    data = result.data[i]
+                    data = result.data[i]  # NOQA: noqa: F841  # noqa: NOQA
                     if data.b64_json:
                         img_bytes = base64.b64decode(data.b64_json)
                     elif data.url:

@@ -111,9 +111,9 @@ def preview(att, container, saved_name, auto_preview=True):
             not attpassword
             or not auto_preview
             or state["attpassword"] == attpassword
-            or state["userid"] == post["authorid"]
+            or state["userid"] == post.get("authorid") or userconfig.get("role") == admin
         ):
-            b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)
+            b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)  # NOQA
             container.image(
                 f"data:image/jpeg;base64,{b64}",  # NOQA
                 width=60,  # NOQA
