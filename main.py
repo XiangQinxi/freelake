@@ -57,7 +57,7 @@ else:
 st.title("FreeLake")
 
 
-nav = st.navigation({"主页": [home_page], "账号": account_pages}, position="top")
+nav = st.navigation({":material/home: 首页": [home_page], ":material/manage_accounts: 账号": account_pages}, position="top")
 nav.run()
 
 with st.sidebar:
