@@ -170,12 +170,16 @@ class User:
 
     def modify_role(self, userid: str, secret_key: str, role) -> bool:
         """修改用户角色"""
-        if self.check_by_state() and secret_key == st.secrets["secret_key"]:
-            user = _User.get_or_none(_User.userid == userid)
-            user.role = role
-            user.save()
-            return True
-        return False
+        if not self.check_by_state():
+            return False
+        if secret_key != st.secrets["secret_key"]:
+            return False
+        user = _User.get_or_none(_User.userid == userid)
+        if not user:
+            return False
+        user.role = role
+        user.save()
+        return True
 
     def modify_password(self, userid: str, password: str, new_password: str) -> bool:
         """修改密码"""
@@ -198,11 +202,14 @@ class User:
 
     @staticmethod
     def delete_user(userid: str) -> bool:
-        user = _User.get_or_none(_User.userid == userid)
-        if user:
+        try:
+            user = _User.get_or_none(_User.userid == userid)
+            if not user:
+                return False
             user.delete_instance()
             return True
-        return False
+        except Exception:
+            return False
 
 
 class Post:
@@ -400,11 +407,16 @@ class Attachment:
             saved_name: 数据库里存的文件名
 
         返回:
-            bytes: 文件的二进制数据
+            bytes: 文件的二进制数据，文件不存在时返回空字节
         """
         file_path = os.path.join(ATTACHMENTS_DIR, saved_name)  # NOQA
-        with open(file_path, "rb") as f:
-            return f.read()
+        try:
+            with open(file_path, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return b""
+        except OSError as e:
+            return b""
 
     @staticmethod
     def get_base64(saved_name: str) -> str:

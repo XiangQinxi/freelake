@@ -41,14 +41,14 @@ with st.expander("用户管理", expanded=True):
     st.dataframe(df, use_container_width=True)
 
     with st.container(border=True):
-        col_a, col_b = st.columns(2)
+        col_a, col_b = st.columns(2, vertical_alignment="bottom")
         search_uid = col_a.text_input("搜索用户 ID", placeholder="输入 userid 查询")
         if search_uid and col_b.button("查询"):
             cfg = user.get_config(search_uid)
             if cfg:
                 st.json(cfg)
             else:
-                st.warning("用户不存在")
+                st.warning(f"用户 {search_uid} 不存在")
 
     with st.container(border=True):
         col_a, col_b, col_c = st.columns(3)
@@ -56,24 +56,48 @@ with st.expander("用户管理", expanded=True):
         new_role = col_b.selectbox("新角色", ["user", "admin"], key="new_role")
         secret_key = col_c.text_input("密钥", type="password", key="role_secret")
         if st.button("修改角色", key="modify_role_btn"):
-            if user.modify_role(target_uid, secret_key, new_role):
-                st.success(f"已修改 {target_uid} 的角色为 {new_role}")
-                st.rerun()
+            if not target_uid:
+                st.warning("请输入目标用户 ID")
+            elif not secret_key:
+                st.warning("请输入密钥")
             else:
-                st.error("修改失败，请检查密钥或用户 ID")
+                try:
+                    if user.modify_role(target_uid, secret_key, new_role):
+                        st.success(f"已修改 {target_uid} 的角色为 {new_role}")
+                        st.rerun()
+                    else:
+                        st.error("修改失败：密钥错误、用户不存在或登录状态已过期")
+                except Exception as e:
+                    st.error(f"修改失败：{e}")
 
     with st.container(border=True):
-        col_a, col_b = st.columns(2)
+        col_a, col_b = st.columns(2, vertical_alignment="bottom")
         del_uid = col_a.text_input("输入用户 ID 以删除", key="del_userid")
         if col_b.button("删除用户", type="primary", key="del_user_btn"):
             if del_uid:
-                if user.delete_user(del_uid):
-                    st.success(f"已删除用户 {del_uid}")
-                    st.rerun()
-                else:
-                    st.error("用户不存在")
+                state = st.session_state
+                state["del_user_confirm"] = del_uid
             else:
                 st.warning("请输入用户 ID")
+        confirm_uid = st.session_state.get("del_user_confirm")
+        if confirm_uid:
+            st.warning(f"确定要删除用户 **{confirm_uid}** 吗？此操作不可撤销！")
+            col_x, col_y = st.columns(2, vertical_alignment="bottom")
+            if col_x.button("确认删除", type="primary", key="confirm_del_user"):
+                try:
+                    if user.delete_user(confirm_uid):
+                        st.success(f"已删除用户 {confirm_uid}")
+                        del st.session_state["del_user_confirm"]
+                        st.rerun()
+                    else:
+                        st.error(f"用户 {confirm_uid} 不存在")
+                        del st.session_state["del_user_confirm"]
+                except Exception as e:
+                    st.error(f"删除用户失败：{e}")
+                    del st.session_state["del_user_confirm"]
+            if col_y.button("取消", key="cancel_del_user"):
+                del st.session_state["del_user_confirm"]
+                st.rerun()
 
 with st.expander("文章管理", expanded=True):
     post = Post()
@@ -83,57 +107,82 @@ with st.expander("文章管理", expanded=True):
     st.dataframe(df, use_container_width=True)
 
     with st.container(border=True):
-        col_a, col_b = st.columns([0.8, 0.2])
+        col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
         search_pid = col_a.text_input("按文章 ID 搜索", placeholder="输入 post_id")
         if col_b.button("搜索", key="search_post_btn"):
             if search_pid:
-                p = post.get(int(search_pid))
-                if p:
-                    st.json(
-                        {
-                            "id": p["id"],
-                            "title": p["title"],
-                            "authorid": p["authorid"],
-                            "content": p["content"][:200]
-                            + ("..." if len(p["content"]) > 200 else ""),
-                            "created_at": p["created_at"],
-                            "tags": p["tags"],
-                            "attachments_count": len(p.get("attachments", [])),
-                            "comments_count": len(p.get("comments", [])),
-                        }
-                    )
-                else:
-                    st.warning("文章不存在")
+                try:
+                    p = post.get(int(search_pid))
+                    if p:
+                        st.json(
+                            {
+                                "id": p["id"],
+                                "title": p["title"],
+                                "authorid": p["authorid"],
+                                "content": p["content"][:200]
+                                + ("..." if len(p["content"]) > 200 else ""),
+                                "created_at": p["created_at"],
+                                "tags": p["tags"],
+                                "attachments_count": len(p.get("attachments", [])),
+                                "comments_count": len(p.get("comments", [])),
+                            }
+                        )
+                    else:
+                        st.warning(f"文章 #{search_pid} 不存在")
+                except ValueError:
+                    st.error("文章 ID 必须是数字")
+                except Exception as e:
+                    st.error(f"查询失败：{e}")
             else:
                 st.warning("请输入文章 ID")
 
     with st.container(border=True):
-        col_a, col_b = st.columns([0.8, 0.2])
+        col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
         del_pid = col_a.text_input("输入文章 ID 以删除", key="del_postid")
         if col_b.button("删除文章", type="primary", key="del_post_btn"):
             if del_pid:
-                if post.delete(int(del_pid)):
-                    st.success(f"已删除文章 #{del_pid}")
-                    st.rerun()
-                else:
-                    st.error("文章不存在")
+                st.session_state["del_post_confirm"] = del_pid
             else:
                 st.warning("请输入文章 ID")
+        confirm_pid = st.session_state.get("del_post_confirm")
+        if confirm_pid:
+            st.warning(f"确定要删除文章 **#{confirm_pid}** 吗？此操作不可撤销！")
+            col_x, col_y = st.columns(2)
+            if col_x.button("确认删除", type="primary", key="confirm_del_post"):
+                try:
+                    if post.delete(int(confirm_pid)):
+                        st.success(f"已删除文章 #{confirm_pid}")
+                        del st.session_state["del_post_confirm"]
+                        st.rerun()
+                    else:
+                        st.error(f"文章 #{confirm_pid} 不存在")
+                        del st.session_state["del_post_confirm"]
+                except Exception as e:
+                    st.error(f"删除失败：{e}")
+                    del st.session_state["del_post_confirm"]
+            if col_y.button("取消", key="cancel_del_post"):
+                del st.session_state["del_post_confirm"]
+                st.rerun()
 
     with st.container(border=True):
         st.caption("评论管理")
         comments_df = pd.DataFrame(get_comment_summary()).astype(str)
         st.dataframe(comments_df, use_container_width=True)
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b, col_c = st.columns(3, vertical_alignment="bottom")
         c_post_id = col_a.text_input("文章 ID", key="comment_postid")
         c_index = col_b.text_input("评论索引", key="comment_index")
         if col_c.button("删除评论", type="primary", key="del_comment_btn"):
             if c_post_id and c_index:
-                if post.delete_comment(int(c_post_id), int(c_index)):
-                    st.success("评论已删除")
-                    st.rerun()
-                else:
-                    st.error("删除失败，请检查文章 ID 和评论索引")
+                try:
+                    if post.delete_comment(int(c_post_id), int(c_index)):
+                        st.success("评论已删除")
+                        st.rerun()
+                    else:
+                        st.error("删除失败：请检查文章 ID 和评论索引是否正确")
+                except ValueError:
+                    st.error("文章 ID 和评论索引必须是数字")
+                except Exception as e:
+                    st.error(f"删除失败：{e}")
             else:
                 st.warning("请填写文章 ID 和评论索引")
 
@@ -195,6 +244,6 @@ with st.expander("文件管理", expanded=True):
         show_delete_file=True,
         show_download_file=False,
         show_new_folder=True,
-        show_upload_file=False,
+        show_upload_file=True,
     )
     st.write(event)

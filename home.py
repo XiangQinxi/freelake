@@ -31,6 +31,21 @@ if "attpassword" not in state:
     state["attpassword"] = sha256("")
 
 
+@st.dialog("确认删除")
+def confirm_delete_post(post_id):
+    st.warning("确定要删除这篇文章吗？此操作不可撤销！")
+    if st.button("确认删除", type="primary"):
+        try:
+            if Post.delete(post_id):
+                st.success("文章删除成功！")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("文章不存在或已被删除")
+        except Exception as e:
+            st.error(f"删除失败：{e}")
+
+
 @st.dialog("编辑该文章")
 def edit_post(post):
     new_title = st.text_input(
@@ -85,12 +100,7 @@ def basic_information(post):
                 case ":material/edit: 编辑":
                     edit_post(post)
                 case ":material/delete: 删除":
-                    if Post.delete(post["id"]):
-                        st.success("文章删除成功！")
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error("文章删除失败！")
+                    confirm_delete_post(post["id"])
     if post["tags"]:
         for tag in post["tags"]:
             st.badge(tag, color="primary")
@@ -111,7 +121,8 @@ def preview(att, container, saved_name, auto_preview=True):
             not attpassword
             or not auto_preview
             or state["attpassword"] == attpassword
-            or state["userid"] == post.get("authorid") or userconfig.get("role") == admin
+            or state["userid"] == post.get("authorid")
+            or userconfig.get("role") == admin
         ):
             b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)  # NOQA
             container.image(
@@ -190,6 +201,11 @@ else:
                         file_bytes = (
                             Attachment.get_file(saved_name) if saved_name else b""
                         )
+                        if not file_bytes and saved_name:
+                            st.warning(
+                                f"附件 {att.get('original_name', '未命名')} 文件已丢失"
+                            )
+                            continue
                         b64 = base64.b64encode(file_bytes).decode()
                         if att.get("type", "").startswith("image/"):
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
@@ -197,6 +213,7 @@ else:
                     st.caption("📎 附件")
 
                     zip_buffer = io.BytesIO()
+                    missing_count = 0
                     with ZipFile(zip_buffer, "w") as zf:
                         for att in attachments:
                             saved_name = att.get("saved_name", "")
@@ -207,6 +224,10 @@ else:
                                 zf.writestr(
                                     att.get("original_name", "download"), file_bytes
                                 )
+                            else:
+                                missing_count += 1
+                    if missing_count:
+                        st.warning(f"有 {missing_count} 个附件文件已丢失，无法打包")
                     st.download_button(
                         label=":material/folder_zip: 下载所有附件 (ZIP)",
                         data=zip_buffer.getvalue(),
@@ -229,6 +250,8 @@ else:
 
                         col_b.write(f"**{att.get('original_name', '未命名')}**")
                         col_c.write(f"{format_size(att.get('size', 0))}")
+                        if not file_bytes and saved_name:
+                            col_c.write(":material/warning: 文件已丢失")
                         with col_d.popover("..."):
                             if file_bytes:
                                 if st.toggle(
@@ -281,7 +304,9 @@ else:
                         comment = json.loads(comment)
                         cfg = user.get_config(comment["userid"])
                         if cfg:
-                            col_a, col_b, col_c = st.columns([0.08, 0.82, 0.1], vertical_alignment="top")
+                            col_a, col_b, col_c = st.columns(
+                                [0.08, 0.82, 0.1], vertical_alignment="top"
+                            )
                             col_a.image(
                                 cfg["avatar"],
                                 width=40,
@@ -291,11 +316,16 @@ else:
                             col_b.caption(comment.get("created_at", ""))
                             col_b.markdown(comment["content"])
                             if user.check_by_state():
-                                if userconfig.get("userid") == comment["userid"] or userconfig.get("role") == admin:
+                                if (
+                                    userconfig.get("userid") == comment["userid"]
+                                    or userconfig.get("role") == admin
+                                ):
                                     action = col_c.menu_button(
                                         "",
-                                        options=[":material/edit: 编辑",
-                                                 ":material/delete: 删除"],
+                                        options=[
+                                            ":material/edit: 编辑",
+                                            ":material/delete: 删除",
+                                        ],
                                         icon=":material/more_vert:",
                                         key=f"comment{index}.menu",
                                         type="tertiary",

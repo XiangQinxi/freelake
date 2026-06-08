@@ -32,8 +32,11 @@ with st.form(key="publish"):
             _attachments = []
             if uploaded_files:
                 for uploaded_file in uploaded_files:
-                    meta = Attachment.save(uploaded_file)
-                    _attachments.append(meta)
+                    try:
+                        meta = Attachment.save(uploaded_file)
+                        _attachments.append(meta)
+                    except Exception as e:
+                        st.error(f"附件 “{uploaded_file.name}” 保存失败：{e}")
 
             Post.publish(
                 authorid=userid,
