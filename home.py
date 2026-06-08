@@ -32,7 +32,10 @@ if "attpassword" not in state:
 @st.dialog("编辑该文章")
 def edit(post):
     new_title = st.text_input(
-        "文章标题", placeholder="请输入标题", value=post["title"], label_visibility="collapsed"
+        "文章标题",
+        placeholder="请输入标题",
+        value=post["title"],
+        label_visibility="collapsed",
     )
     new_content = st.text_area(
         "文章内容",
@@ -40,7 +43,9 @@ def edit(post):
         value=post["content"],
         label_visibility="collapsed",
     )
-    new_tags = st.multiselect("标签", tags, default=post["tags"], accept_new_options=False)
+    new_tags = st.multiselect(
+        "标签", tags, default=post["tags"], accept_new_options=False
+    )
     if st.button("提交修改"):
         if not new_title:
             st.error("请输入标题！")
@@ -164,9 +169,11 @@ else:
 
                 attpassword = post.get("attpassword")
 
-                if (attpassword and state["attpassword"] != attpassword) and state[
-                    "userid"
-                ] != post["authorid"] and userconfig["role"] != admin:
+                if (
+                    (attpassword and state["attpassword"] != attpassword)
+                    and state["userid"] != post["authorid"]
+                    and userconfig["role"] != admin
+                ):
                     attpwd = st.text_input(
                         "专属密码",
                         placeholder="请输入专属密码以查看附件内容！",
