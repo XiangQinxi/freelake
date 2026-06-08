@@ -14,6 +14,16 @@ state = st.session_state
 post_id = params.get("post_id")
 user_id = params.get("user_id")  # 用于查看某人的简介
 search_keyword = params.get("search_keyword", None)
+userconfig = user.get_config(state["userid"])
+if userconfig is None:
+    userconfig = {
+        "userid": None,
+        "username": None,
+        "created_at": None,
+        "description": None,
+        "role": None,
+        "avatar": None,
+    }
 
 if "attpassword" not in state:
     state["attpassword"] = sha256("")
@@ -54,7 +64,7 @@ def basic_information(post):
     )
     col_2.subheader(f"{post['title']}")
     if user.check_by_state():
-        userconfig = user.get_config(state["userid"])
+
         if (
             post["authorid"] == state["userid"] or userconfig["role"] == admin
         ):  # 只有作者或管理员才能操作
@@ -156,7 +166,7 @@ else:
 
                 if (attpassword and state["attpassword"] != attpassword) and state[
                     "userid"
-                ] != post["authorid"]:
+                ] != post["authorid"] and userconfig["role"] != admin:
                     attpwd = st.text_input(
                         "专属密码",
                         placeholder="请输入专属密码以查看附件内容！",
