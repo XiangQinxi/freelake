@@ -26,17 +26,17 @@ if not cookies.ready():
 state["userid"] = cookies.get("userid", "")
 state["password"] = cookies.get("password", "")
 
-st.set_page_config(page_icon="logo.ico", layout="centered")
+st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
 
-home_page = st.Page("home.py", title="首页")
-publish_page = st.Page("publish.py", title="发布文章")
-login_page = st.Page("login.py", title="登录")
-register_page = st.Page("register.py", title="注册")
-logout_page = st.Page("logout.py", title="退出登录")
-userconfig_page = st.Page("user_config.py", title="用户配置")
-upgrade_page = st.Page("upgrade.py", title="升级管理员")
-admin_page = st.Page("admin.py", title="管理员页面")
-image_generate_page = st.Page("image_generate.py", title="图片生成")
+home_page = st.Page("home.py", title=":material/home: 首页")
+publish_page = st.Page("publish.py", title=":material/publish: 发布文章")
+login_page = st.Page("login.py", title=":material/login: 登录")
+register_page = st.Page("register.py", title=":material/person: 注册")
+logout_page = st.Page("logout.py", title=":material/logout: 退出登录")
+userconfig_page = st.Page("user_config.py", title=":material/settings: 用户配置")
+upgrade_page = st.Page("upgrade.py", title=":material/upgrade: 升级管理员")
+admin_page = st.Page("admin.py", title=":material/security: 管理员页面")
+image_generate_page = st.Page("image_generate.py", title=":material/auto_awesome: 图片生成")
 
 user = User()
 account_pages = []
