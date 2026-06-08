@@ -106,7 +106,9 @@ def basic_information(post):
             st.badge(tag, color="primary")
     st.table(
         {
-            ":material/person: 作者名称": user.get_config(post["authorid"])["username"],  # NOQA
+            ":material/person: 作者名称": user.get_config(post["authorid"])[
+                "username"
+            ],  # NOQA
             ":material/access_time: 发布时间": post["created_at"],
             ":material/info: 文章ID": post["id"],
         },
@@ -260,11 +262,17 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.image(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.video(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.audio(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",

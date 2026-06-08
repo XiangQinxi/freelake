@@ -36,7 +36,9 @@ logout_page = st.Page("logout.py", title=":material/logout: 退出登录")
 userconfig_page = st.Page("user_config.py", title=":material/settings: 用户配置")
 upgrade_page = st.Page("upgrade.py", title=":material/upgrade: 升级管理员")
 admin_page = st.Page("admin.py", title=":material/security: 管理员页面")
-image_generate_page = st.Page("image_generate.py", title=":material/auto_awesome: 图片生成")
+image_generate_page = st.Page(
+    "image_generate.py", title=":material/auto_awesome: 图片生成"
+)
 
 user = User()
 account_pages = []
@@ -57,7 +59,13 @@ else:
 st.title("FreeLake")
 
 
-nav = st.navigation({":material/home: 首页": [home_page], ":material/manage_accounts: 账号": account_pages}, position="top")
+nav = st.navigation(
+    {
+        ":material/home: 首页": [home_page],
+        ":material/manage_accounts: 账号": account_pages,
+    },
+    position="top",
+)
 nav.run()
 
 with st.sidebar:

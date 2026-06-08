@@ -6,12 +6,13 @@ import json
 import os
 import typing
 import uuid
-import toml
 
 import streamlit as st
+import toml
 from peewee import *
 from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
+
 from const import admin, user
 
 db = SqliteDatabase("data.db")

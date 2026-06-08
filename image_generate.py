@@ -83,7 +83,9 @@ with st.container(border=True):
         index=0,
     )
 
-    number: int = st.number_input("生成数量", min_value=1, max_value=10, value=1)  # noqa: NOQA
+    number: int = st.number_input(
+        "生成数量", min_value=1, max_value=10, value=1
+    )  # noqa: NOQA
 
     if st.button("生成图片"):
         if not prompt:
