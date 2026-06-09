@@ -16,6 +16,22 @@ with st.form("Register"):
     password = st.text_input("密码", type="password")
     password2 = st.text_input("请重新输入密码", type="password")
 
+    allowed = True
+
+    if password:
+        if len(password) < 8:
+            allowed = False
+            st.error("密码长度不能小于8位！")
+
+        if not any(char.isalpha() for char in password):
+            allowed = False
+            st.error("密码必须包含字母和数字的组合！")
+
+    st.markdown("""
+    - 密码长度至少8位
+    - 必须包含字母和数字的组合
+    """)
+
     if st.form_submit_button("确认"):
         if not userid:
             st.error("用户ID不能为空")
@@ -26,6 +42,8 @@ with st.form("Register"):
         else:
             if password != password2:
                 st.error("重新输入的密码与原来的密码不一致")
+            elif not allowed:
+                pass
             else:
                 if user.register(userid, username, password):  # NOQA
                     st.success("注册成功！")
