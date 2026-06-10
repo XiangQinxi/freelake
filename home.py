@@ -7,7 +7,7 @@ from zipfile import ZipFile
 import streamlit as st
 from streamlit_extras.pagination import pagination
 
-from api import Attachment, Post, User, format_size, sha256
+from api import Attachment, Bookmark, Like, Post, User, format_size, sha256
 from const import admin, tags
 
 user = User()
@@ -76,6 +76,8 @@ def edit_post(post):
                 st.rerun()
             else:
                 st.error("文章修改失败！")
+
+
 # endregion
 
 
@@ -109,9 +111,7 @@ def basic_information(post):
             st.badge(tag, color="primary")
     st.table(
         {
-            ":material/person: 作者名称": user.get_config(post["authorid"])[
-                "username"
-            ],  # NOQA
+            ":material/person: 作者名称": user.get_config(post["authorid"])["username"],  # NOQA
             ":material/access_time: 发布时间": post["created_at"],
             ":material/info: 文章ID": post["id"],
         },
@@ -144,6 +144,42 @@ def preview(att, container, saved_name, auto_preview=True):
         container.markdown(":material/insert_drive_file:")
     else:
         container.markdown(":material/insert_drive_file:")
+
+
+def like_and_bookmarked(post):
+    with st.container(horizontal=True):
+        liked = (
+            Like.is_liked(post["id"], state["userid"])
+            if state.get("userid")
+            else False
+        )
+        if st.button(
+                f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
+                key=f"detail_like_{post['id']}",
+                type="tertiary",
+        ):
+            if state.get("userid"):
+                Like.toggle(post["id"], state["userid"])
+                st.rerun()
+            else:
+                st.warning("请先登录")
+        bookmarked = (
+            Bookmark.is_bookmarked(post["id"], state["userid"])
+            if state.get("userid")
+            else False
+        )
+        if st.button(
+                ":material/bookmark:" if bookmarked else ":material/bookmark_border:",
+                key=f"detail_bm_{post['id']}",
+                type="tertiary",
+        ):
+            if state.get("userid"):
+                Bookmark.toggle(post["id"], state["userid"])
+                st.rerun()
+            else:
+                st.warning("请先登录")
+
+
 # endregion
 
 
@@ -180,6 +216,8 @@ else:
             basic_information(post)
 
             st.markdown(post["content"])
+
+            #like_and_bookmarked(post)
 
             # 显示附件
             attachments = post.get("attachments", [])
@@ -269,17 +307,11 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",
@@ -399,6 +431,16 @@ else:
                 st.rerun()
 
             selected_tag = st.pills(":material/filter_alt: 筛选", tags)
+
+            show_bookmarked = (
+                st.checkbox(
+                    ":material/bookmark: 仅显示已收藏",
+                    value=False,
+                    disabled=not user.check_by_state(),
+                )
+                if user.check_by_state()
+                else False
+            )
         # endregion
 
         # region 分页
@@ -430,19 +472,31 @@ else:
                     if selected_tag not in post["tags"]:
                         continue
                 post = Post.get(post["id"])
+                if post is None:
+                    continue
+                if show_bookmarked and state.get("userid"):
+                    if post["id"] not in Bookmark.get_bookmarked_post_ids(
+                        state["userid"]
+                    ):
+                        continue
 
                 with st.container(border=True):
                     basic_information(post)
                     st.markdown(post["content"][0:40] + "...")
-                    if st.button("查看详细内容", key=post["id"]):
+
+                    # like_and_bookmarked(post)
+
+                    if st.button("查看详细内容", key=f"view_{post['id']}"):
                         params["post_id"] = str(post["id"])
                         st.rerun()
-                    #st.info(post)
+                    # st.info(post)
                     if post.get("comments"):
                         with st.expander("最新一条评论", expanded=True):
-                            last_comment = json.loads(post.get('comments')[-1])
+                            last_comment = json.loads(post.get("comments")[-1])
                             last_comment_user = user.get_config(last_comment["userid"])
-                            st.markdown(f"{last_comment_user['username']}： {last_comment['content']} （{last_comment['created_at']}）")
+                            st.markdown(
+                                f"{last_comment_user['username']}： {last_comment['content']} （{last_comment['created_at']}）"
+                            )
                     attachments = post.get("attachments", [])
                     if attachments:
                         st.divider()

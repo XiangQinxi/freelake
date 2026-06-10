@@ -44,6 +44,7 @@ def execute_sql(query: str) -> list[dict[str, str]]:
     """执行SQL查询"""
     return list(db.execute(query).dicts())
 
+
 # region 数据库模型
 class BaseModel(Model):
     class Meta:
@@ -89,11 +90,24 @@ class _Comment(BaseModel):
     created_at = CharField()
     attachments = JSONField(default=list)
     attpassword = CharField(max_length=256, default="")
+
+
+class _Like(BaseModel):
+    postid = IntegerField()
+    userid = CharField()
+
+
+class _Bookmark(BaseModel):
+    postid = IntegerField()
+    userid = CharField()
+
+
 # endregion
 
 
 db.connect()
-db.create_tables([_User, _Post, _Comment], safe=True)
+db.create_tables([_User, _Post, _Comment, _Like, _Bookmark], safe=True)
+
 
 def sha256(value):
     """获取哈希加密加盐后的文本"""
@@ -460,6 +474,60 @@ class Attachment:
         return base64.b64encode(file_bytes).decode()
 
 
+class Like:
+    @staticmethod
+    def toggle(postid: int, userid: str) -> bool:
+        like = _Like.get_or_none((_Like.postid == postid) & (_Like.userid == userid))
+        if like:
+            like.delete_instance()
+            return False
+        else:
+            _Like.create(postid=postid, userid=userid)
+            return True
+
+    @staticmethod
+    def is_liked(postid: int, userid: str) -> bool:
+        return (
+            _Like.get_or_none((_Like.postid == postid) & (_Like.userid == userid))
+            is not None
+        )
+
+    @staticmethod
+    def count(postid: int) -> int:
+        return _Like.select().where(_Like.postid == postid).count()
+
+    @staticmethod
+    def get_liked_user_ids(postid: int) -> list[str]:
+        return [like.userid for like in _Like.select().where(_Like.postid == postid)]
+
+
+class Bookmark:
+    @staticmethod
+    def toggle(postid: int, userid: str) -> bool:
+        bm = _Bookmark.get_or_none(
+            (_Bookmark.postid == postid) & (_Bookmark.userid == userid)
+        )
+        if bm:
+            bm.delete_instance()
+            return False
+        else:
+            _Bookmark.create(postid=postid, userid=userid)
+            return True
+
+    @staticmethod
+    def is_bookmarked(postid: int, userid: str) -> bool:
+        return (
+            _Bookmark.get_or_none(
+                (_Bookmark.postid == postid) & (_Bookmark.userid == userid)
+            )
+            is not None
+        )
+
+    @staticmethod
+    def get_bookmarked_post_ids(userid: str) -> list[int]:
+        return [b.postid for b in _Bookmark.select().where(_Bookmark.userid == userid)]
+
+
 class Avatar:
     @staticmethod
     def save(uploaded_file) -> dict:
@@ -506,6 +574,98 @@ class Avatar:
             "size": uploaded_file.size,  # 文件大小（字节）
             "path": file_path,  # 相对路径（用于读取时拼接）
         }
+
+
+# endregion
+
+
+# region 数据导出
+def export_users_csv() -> bytes:
+    import csv, io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["userid", "username", "created_at", "description", "role"])
+    for u in _User.select().dicts():
+        writer.writerow(
+            [u["userid"], u["username"], u["created_at"], u["description"], u["role"]]
+        )
+    return output.getvalue().encode("utf-8-sig")
+
+
+def export_users_json() -> bytes:
+    import json
+
+    data = list(_User.select().dicts())
+    return json.dumps(data, ensure_ascii=False, indent=2, default=str).encode(
+        "utf-8-sig"
+    )
+
+
+def export_posts_csv() -> bytes:
+    import csv, io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "authorid",
+            "title",
+            "content",
+            "created_at",
+            "tags",
+            "attachments_count",
+            "comments_count",
+        ]
+    )
+    for p in _Post.select().dicts():
+        writer.writerow(
+            [
+                p["id"],
+                p["authorid"],
+                p["title"],
+                p["content"],
+                p["created_at"],
+                ";".join(p.get("tags") or []),
+                len(p.get("attachments") or []),
+                len(p.get("comments") or []),
+            ]
+        )
+    return output.getvalue().encode("utf-8-sig")
+
+
+def export_posts_json() -> bytes:
+    import json
+
+    data = list(_Post.select().dicts())
+    return json.dumps(data, ensure_ascii=False, indent=2, default=str).encode(
+        "utf-8-sig"
+    )
+
+
+def export_comments_csv() -> bytes:
+    import csv, io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "postid", "userid", "content", "created_at"])
+    for c in _Comment.select().dicts():
+        writer.writerow(
+            [c["id"], c["postid"], c["userid"], c["content"], c["created_at"]]
+        )
+    return output.getvalue().encode("utf-8-sig")
+
+
+def export_comments_json() -> bytes:
+    import json
+
+    data = list(_Comment.select().dicts())
+    return json.dumps(data, ensure_ascii=False, indent=2, default=str).encode(
+        "utf-8-sig"
+    )
+
+
 # endregion
 
 
@@ -635,4 +795,6 @@ def delete_orphaned_comments() -> int:
     for c in orphans:
         _Comment.delete().where(_Comment.id == c["id"]).execute()
     return len(orphans)
+
+
 # endregion

@@ -12,6 +12,12 @@ from api import (
     delete_orphaned_attachments,
     delete_orphaned_comments,
     execute_sql,
+    export_comments_csv,
+    export_comments_json,
+    export_posts_csv,
+    export_posts_json,
+    export_users_csv,
+    export_users_json,
     format_size,
     get_all_attachments,
     get_attachment_stats,
@@ -304,6 +310,62 @@ with st.expander("系统工具", expanded=False):
         db_path = os.path.join(os.path.dirname(__file__), "data.db")
         if os.path.exists(db_path):
             st.metric("数据库大小", format_size(os.path.getsize(db_path)), border=True)
+# endregion
+
+# region 数据导出
+with st.expander("数据导出", expanded=False):
+    tab_users, tab_posts, tab_comments = st.tabs(["用户数据", "文章数据", "评论数据"])
+
+    with tab_users:
+        col_a, col_b = st.columns(2)
+        col_a.download_button(
+            label=":material/download: 导出用户 (CSV)",
+            data=export_users_csv(),
+            file_name="freelake_users.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        col_b.download_button(
+            label=":material/download: 导出用户 (JSON)",
+            data=export_users_json(),
+            file_name="freelake_users.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    with tab_posts:
+        col_a, col_b = st.columns(2)
+        col_a.download_button(
+            label=":material/download: 导出文章 (CSV)",
+            data=export_posts_csv(),
+            file_name="freelake_posts.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        col_b.download_button(
+            label=":material/download: 导出文章 (JSON)",
+            data=export_posts_json(),
+            file_name="freelake_posts.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    with tab_comments:
+        col_a, col_b = st.columns(2)
+        col_a.download_button(
+            label=":material/download: 导出评论 (CSV)",
+            data=export_comments_csv(),
+            file_name="freelake_comments.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        col_b.download_button(
+            label=":material/download: 导出评论 (JSON)",
+            data=export_comments_json(),
+            file_name="freelake_comments.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 # endregion
 
 # region 文件管理
