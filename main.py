@@ -4,6 +4,7 @@ import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from api import User
+from api2 import check_by_state
 from const import admin
 
 state = st.session_state
@@ -28,21 +29,21 @@ state["password"] = cookies.get("password", "")
 
 st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
 
-home_page = st.Page("home.py", title=":material/home: 首页")
-publish_page = st.Page("publish.py", title=":material/publish: 发布文章")
-login_page = st.Page("login.py", title=":material/login: 登录")
-register_page = st.Page("register.py", title=":material/person: 注册")
-logout_page = st.Page("logout.py", title=":material/logout: 退出登录")
-userconfig_page = st.Page("user_config.py", title=":material/settings: 用户配置")
-upgrade_page = st.Page("upgrade.py", title=":material/upgrade: 升级管理员")
-admin_page = st.Page("admin.py", title=":material/security: 管理员页面")
+home_page = st.Page("pages/home.py", title=":material/home: 首页")
+publish_page = st.Page("pages/publish.py", title=":material/publish: 发布文章")
+login_page = st.Page("pages/login.py", title=":material/login: 登录")
+register_page = st.Page("pages/register.py", title=":material/person: 注册")
+logout_page = st.Page("pages/logout.py", title=":material/logout: 退出登录")
+userconfig_page = st.Page("pages/user_config.py", title=":material/settings: 用户配置")
+upgrade_page = st.Page("pages/upgrade.py", title=":material/upgrade: 升级管理员")
+admin_page = st.Page("pages/admin.py", title=":material/security: 管理员页面")
 image_generate_page = st.Page(
-    "image_generate.py", title=":material/auto_awesome: 图片生成"
+    "pages/image_generate.py", title=":material/auto_awesome: 图片生成"
 )
 
 user = User()
 account_pages = []
-if not user.check_by_state():
+if not check_by_state():
     account_pages.append(login_page)
     account_pages.append(register_page)
 else:

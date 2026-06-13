@@ -1,0 +1,11 @@
+streamlit
+playhouse
+peewee
+Pillow
+pandas
+openai
+toml
+
+streamlit-file-browser
+streamlit-extras
+streamlit-cookies-manager
