@@ -7,8 +7,6 @@
 ### Streamlit试用
 进入该网站以查看效果：https://freelake.streamlit.app/
 
-![Streamlit试用](preview.png)
-
 ### 本地部署
 1. 克隆仓库
     ```bash
@@ -24,6 +22,10 @@
     ```bash
     streamlit run main.py
     ```
+
+## 文件结构
+- `v1` 是上代版本的文件，
+- 主文件夹便是`v2`版本的文件，是根据`v1`版本进行整理的。
 
 ## 计划
 - [ ] 首页文章展示最新一条评论

@@ -7,7 +7,6 @@ import os
 import typing
 import uuid
 
-import streamlit as st
 import toml
 from peewee import *
 from PIL import Image
@@ -170,56 +169,42 @@ class User:
             }
         return None
 
-    def modify_config(
-        self, userid: str, username: str, description: str, avatar: str | None = None
+    def modify(
+        self,
+        # 验证信息
+        userid: str,
+        password: str,
+        # 基本信息
+        username: str | None = None,
+        description: str | None = None,
+        avatar: str | None = None,
+        # 高级选项
+        role: str | None = None,
+        new_password: str | None = None,
     ) -> bool:
         """修改用户配置"""
-        if self.check_by_state():
+        if self.check(userid, password):
             user = _User.get_or_none(_User.userid == userid)
-            user.username = username
-            user.description = description
+            if username:
+                user.username = username
+            if description:
+                user.description = description
             if avatar:
                 user.avatar = avatar
-            else:
-                user.avatar = user.avatar  # 保持原头像未改变
+            if role:
+                user.role = role
+            if new_password:
+                user.password = sha256(new_password)
             user.save()
             return True
         return False
 
-    def modify_role(self, userid: str, secret_key: str, role) -> bool:
-        """修改用户角色"""
-        if not self.check_by_state():
-            return False
-        if secret_key != st.secrets["secret_key"]:
-            return False
-        user = _User.get_or_none(_User.userid == userid)
-        if not user:
-            return False
-        user.role = role
-        user.save()
-        return True
-
-    def modify_password(self, userid: str, password: str, new_password: str) -> bool:
-        """修改密码"""
-        if self.login(userid, password):
-            user = _User.get(_User.userid == userid)
-            user.password = sha256(new_password)
-            user.save()
-            return True
-        return False
-
-    def check_by_state(self) -> bool:
-        """检查当前登录状态通过`streamlit.session_state`"""
-        return self.check(
-            st.session_state.get("userid"), st.session_state.get("password")
-        )
-
-    @staticmethod
-    def count() -> int:
+    @property
+    def count(self) -> int:
         return _User.select().count()
 
     @staticmethod
-    def delete_user(userid: str) -> bool:
+    def delete(userid: str) -> bool:
         try:
             user = _User.get_or_none(_User.userid == userid)
             if not user:
@@ -528,52 +513,50 @@ class Bookmark:
         return [b.postid for b in _Bookmark.select().where(_Bookmark.userid == userid)]
 
 
-class Avatar:
-    @staticmethod
-    def save(uploaded_file) -> dict:
-        """
-        保存上传的头像到本地磁盘，返回文件的元数据。
+def save_avatar(uploaded_file) -> dict:
+    """
+    保存上传的头像到本地磁盘，返回文件的元数据。
 
-        参数:
-            uploaded_file: streamlit 的上传文件对象 (UploadedFile)
+    参数:
+        uploaded_file: streamlit 的上传文件对象 (UploadedFile)
 
-        返回:
-            dict: 包含文件元数据的字典
-        """
-        # 读取文件二进制数据
-        file_bytes = uploaded_file.getvalue()
+    返回:
+        dict: 包含文件元数据的字典
+    """
+    # 读取文件二进制数据
+    file_bytes = uploaded_file.getvalue()
 
-        # 生成唯一文件名（保留原始扩展名）
-        ext = os.path.splitext(uploaded_file.name)[1]
-        unique_name = f"{uuid.uuid4().hex}{ext}"
+    # 生成唯一文件名（保留原始扩展名）
+    ext = os.path.splitext(uploaded_file.name)[1]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
 
-        # 裁剪为 1:1 正方形（取中心区域）
-        img = Image.open(io.BytesIO(file_bytes))
-        if img.mode == "RGBA":
-            img = img.convert("RGB")
-        width, height = img.size
-        if width != height:
-            side = min(width, height)
-            left = (width - side) // 2
-            top = (height - side) // 2
-            img = img.crop((left, top, left + side, top + side))  # NOQA
-        buf = io.BytesIO()
-        img.save(buf, format=img.format or "JPEG")
-        file_bytes = buf.getvalue()
+    # 裁剪为 1:1 正方形（取中心区域）
+    img = Image.open(io.BytesIO(file_bytes))
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+    width, height = img.size
+    if width != height:
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        img = img.crop((left, top, left + side, top + side))  # NOQA
+    buf = io.BytesIO()
+    img.save(buf, format=img.format or "JPEG")
+    file_bytes = buf.getvalue()
 
-        # 保存文件到 avatars 目录
-        file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
-        with open(file_path, "wb") as f:
-            f.write(file_bytes)
+    # 保存文件到 avatars 目录
+    file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
+    with open(file_path, "wb") as f:
+        f.write(file_bytes)
 
-        # 返回元数据（不包含文件内容，只存路径）
-        return {
-            "original_name": uploaded_file.name,  # 原始文件名
-            "saved_name": unique_name,  # 存储在磁盘的文件名
-            "type": uploaded_file.type,  # MIME 类型（如 image/png）
-            "size": uploaded_file.size,  # 文件大小（字节）
-            "path": file_path,  # 相对路径（用于读取时拼接）
-        }
+    # 返回元数据（不包含文件内容，只存路径）
+    return {
+        "original_name": uploaded_file.name,  # 原始文件名
+        "saved_name": unique_name,  # 存储在磁盘的文件名
+        "type": uploaded_file.type,  # MIME 类型（如 image/png）
+        "size": uploaded_file.size,  # 文件大小（字节）
+        "path": file_path,  # 相对路径（用于读取时拼接）
+    }
 
 
 # endregion
@@ -581,7 +564,8 @@ class Avatar:
 
 # region 数据导出
 def export_users_csv() -> bytes:
-    import csv, io
+    import csv
+    import io
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -603,7 +587,8 @@ def export_users_json() -> bytes:
 
 
 def export_posts_csv() -> bytes:
-    import csv, io
+    import csv
+    import io
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -645,7 +630,8 @@ def export_posts_json() -> bytes:
 
 
 def export_comments_csv() -> bytes:
-    import csv, io
+    import csv
+    import io
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -670,6 +656,8 @@ def export_comments_json() -> bytes:
 
 
 class Config:
+    config = {}
+
     def __init__(self):
         self.load()
 
