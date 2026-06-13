@@ -2,12 +2,14 @@ import time
 
 import streamlit as st
 
-from api import Avatar, User
+from api import save_avatar, User
 
-st.page_link("home.py", label="返回主页")
+st.page_link("pages/home.py", label="返回主页")
 
 user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
+state = st.session_state
+
 if userconfig:
     with st.expander("当前用户信息", expanded=True):
         st.image(userconfig["avatar"], width=250)
@@ -47,14 +49,15 @@ if userconfig:
                     st.error("请输入名称和自我介绍！")
                 else:
                     if new_avatar:
-                        meta = Avatar.save(new_avatar)
+                        meta = save_avatar(new_avatar)
                     else:
                         meta = {}
-                    user.modify_config(
-                        st.session_state.get("userid"),
-                        new_username,
-                        new_description,
-                        meta.get("path") if new_avatar else None,
+                    user.modify(
+                        state.get("userid"),
+                        state.get("password"),
+                        username=new_username,
+                        description=new_description,
+                        avatar=meta.get("path") if new_avatar else None,
                     )
                     st.success("用户信息修改成功！")
                     time.sleep(2)
@@ -69,8 +72,10 @@ if userconfig:
                 if not original_password or not new_password:
                     st.error("请输入原密码和新密码！")
                 else:
-                    user.modify_password(
-                        st.session_state.get("userid"), original_password, new_password
+                    user.modify(
+                        state.get("userid"),
+                        password=original_password,
+                        new_password=new_password,
                     )
                     st.success("密码修改成功！")
                     st.rerun()

@@ -8,4 +8,4 @@ state["password"] = ""
 cookies["userid"] = ""
 cookies["password"] = ""
 
-st.switch_page("home.py")
+st.switch_page("pages/home.py")

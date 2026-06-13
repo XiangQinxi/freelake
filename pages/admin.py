@@ -13,7 +13,7 @@ from api import (Attachment, Post, User, delete_comment_by_id,
                  get_orphaned_attachments, get_orphaned_comments,
                  search_comments, sha256)
 
-st.page_link("home.py", label="返回主页")
+st.page_link("pages/home.py", label="返回主页")
 
 st.subheader("管理员页面")
 

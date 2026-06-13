@@ -5,7 +5,7 @@ import streamlit as st
 from api import Attachment, Post
 from const import tags
 
-st.page_link("home.py", label="返回主页")
+st.page_link("pages/home.py", label="返回主页")
 st.subheader("发布文章")
 with st.form(key="publish"):
     new_title = st.text_input(
@@ -26,9 +26,9 @@ with st.form(key="publish"):
             st.error("请先登录！")
         elif not new_title:
             st.error("请输入标题！")
-        elif not new_content:
-            st.error("请输入内容！")
         else:
+            if not new_content:
+                new_content = "这个作者很懒，什么也没写..."
             _attachments = []
             if uploaded_files:
                 for uploaded_file in uploaded_files:
@@ -48,4 +48,4 @@ with st.form(key="publish"):
             )
             st.success("发布成功！")
             time.sleep(2)
-            st.switch_page("home.py")
+            st.switch_page("pages/home.py")

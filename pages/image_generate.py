@@ -6,7 +6,7 @@ from openai import OpenAI
 
 st.set_page_config(page_title="图片生成", page_icon="🎨")
 
-st.page_link("home.py", label="返回主页")
+st.page_link("pages/home.py", label="返回主页")
 st.subheader("图片生成")
 
 secrets = st.secrets

@@ -5,6 +5,8 @@ import streamlit as st
 from api import User
 from const import admin
 
+st.page_link("pages/home.py", label="返回主页")
+
 st.subheader("升级管理员")
 
 user = User()
@@ -17,6 +19,6 @@ if user.check_by_state():
             if user.modify_role(st.session_state["userid"], secret_key, admin):
                 st.success("升级成功！")
                 time.sleep(2)
-                st.switch_page("home.py")
+                st.switch_page("pages/home.py")
             else:
                 st.error("升级失败！")
