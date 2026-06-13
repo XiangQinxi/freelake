@@ -4,29 +4,14 @@ import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
-from api import (
-    Attachment,
-    Post,
-    User,
-    delete_comment_by_id,
-    delete_orphaned_attachments,
-    delete_orphaned_comments,
-    execute_sql,
-    export_comments_csv,
-    export_comments_json,
-    export_posts_csv,
-    export_posts_json,
-    export_users_csv,
-    export_users_json,
-    format_size,
-    get_all_attachments,
-    get_attachment_stats,
-    get_comment_summary,
-    get_orphaned_attachments,
-    get_orphaned_comments,
-    search_comments,
-    sha256,
-)
+from api import (Attachment, Post, User, delete_comment_by_id,
+                 delete_orphaned_attachments, delete_orphaned_comments,
+                 execute_sql, export_comments_csv, export_comments_json,
+                 export_posts_csv, export_posts_json, export_users_csv,
+                 export_users_json, format_size, get_all_attachments,
+                 get_attachment_stats, get_comment_summary,
+                 get_orphaned_attachments, get_orphaned_comments,
+                 search_comments, sha256)
 
 st.page_link("home.py", label="返回主页")
 

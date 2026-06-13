@@ -27,10 +27,12 @@ with st.form("Register"):
             allowed = False
             st.error("密码必须包含字母和数字的组合！")
 
-    st.markdown("""
+    st.markdown(
+        """
     - 密码长度至少8位
     - 必须包含字母和数字的组合
-    """)
+    """
+    )
 
     if st.form_submit_button("确认"):
         if not userid:

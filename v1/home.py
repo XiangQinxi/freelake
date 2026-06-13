@@ -111,7 +111,9 @@ def basic_information(post):
             st.badge(tag, color="primary")
     st.table(
         {
-            ":material/person: 作者名称": user.get_config(post["authorid"])["username"],  # NOQA
+            ":material/person: 作者名称": user.get_config(post["authorid"])[
+                "username"
+            ],  # NOQA
             ":material/access_time: 发布时间": post["created_at"],
             ":material/info: 文章ID": post["id"],
         },
@@ -149,14 +151,12 @@ def preview(att, container, saved_name, auto_preview=True):
 def like_and_bookmarked(post):
     with st.container(horizontal=True):
         liked = (
-            Like.is_liked(post["id"], state["userid"])
-            if state.get("userid")
-            else False
+            Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
         )
         if st.button(
-                f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
-                key=f"detail_like_{post['id']}",
-                type="tertiary",
+            f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
+            key=f"detail_like_{post['id']}",
+            type="tertiary",
         ):
             if state.get("userid"):
                 Like.toggle(post["id"], state["userid"])
@@ -169,9 +169,9 @@ def like_and_bookmarked(post):
             else False
         )
         if st.button(
-                ":material/bookmark:" if bookmarked else ":material/bookmark_border:",
-                key=f"detail_bm_{post['id']}",
-                type="tertiary",
+            ":material/bookmark:" if bookmarked else ":material/bookmark_border:",
+            key=f"detail_bm_{post['id']}",
+            type="tertiary",
         ):
             if state.get("userid"):
                 Bookmark.toggle(post["id"], state["userid"])
@@ -217,7 +217,7 @@ else:
 
             st.markdown(post["content"])
 
-            #like_and_bookmarked(post)
+            # like_and_bookmarked(post)
 
             # 显示附件
             attachments = post.get("attachments", [])
@@ -307,11 +307,17 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.image(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.video(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
+                                        st.audio(
+                                            f"data:{att['type']};base64,{b64}"
+                                        )  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",
