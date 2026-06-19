@@ -145,7 +145,7 @@ with st.container(border=True):
                     st.session_state.generating = False
 
         for idx, item in enumerate(st.session_state.image_results):
-            st.image(item["img_bytes"], use_container_width=True)
+            st.image(item["img_bytes"], width="stretch")
             st.download_button(
                 label=f"💾 下载图片 {idx + 1} (.{item['ext']})",
                 data=item["img_bytes"],

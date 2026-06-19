@@ -36,7 +36,7 @@ with st.expander("用户管理", expanded=True):
 
     st.metric("用户总数", user.count(), border=True)
     df = pd.DataFrame(user.get_all()).astype(str)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
     with st.container(border=True):
         col_a, col_b = st.columns(2, vertical_alignment="bottom")
@@ -104,7 +104,7 @@ with st.expander("文章管理", expanded=True):
 
     st.metric("文章总数", post.count(), border=True)
     df = pd.DataFrame(post.get_all()).astype(str)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
     with st.container(border=True):
         col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
@@ -177,7 +177,7 @@ with st.expander("评论管理", expanded=True):
 
     with tab1:
         df = pd.DataFrame(get_comment_summary()).astype(str)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
 
         with st.container(border=True):
             col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
@@ -216,9 +216,7 @@ with st.expander("评论管理", expanded=True):
             if keyword:
                 result = search_comments(keyword)
                 if result:
-                    st.dataframe(
-                        pd.DataFrame(result).astype(str), use_container_width=True
-                    )
+                    st.dataframe(pd.DataFrame(result).astype(str), width="stretch")
                 else:
                     st.info("未找到匹配的评论")
             else:
@@ -238,9 +236,7 @@ with st.expander("评论管理", expanded=True):
         if orphans:
             with st.container(border=True):
                 st.caption("孤立评论列表（所属文章已被删除）")
-                st.dataframe(
-                    pd.DataFrame(orphans).astype(str), use_container_width=True
-                )
+                st.dataframe(pd.DataFrame(orphans).astype(str), width="stretch")
 # endregion
 
 # region 附件管理
@@ -249,7 +245,7 @@ with st.expander("附件管理", expanded=True):
     st.metric("附件总数", len(all_attachments), border=True)
     if all_attachments:
         att_df = pd.DataFrame(all_attachments).astype(str)
-        st.dataframe(att_df, use_container_width=True)
+        st.dataframe(att_df, width="stretch")
 
     orphans = get_orphaned_attachments()
     col_a, col_b = st.columns([0.7, 0.3])
@@ -308,14 +304,14 @@ with st.expander("数据导出", expanded=False):
             data=export_users_csv(),
             file_name="freelake_users.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
         col_b.download_button(
             label=":material/download: 导出用户 (JSON)",
             data=export_users_json(),
             file_name="freelake_users.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 
     with tab_posts:
@@ -325,14 +321,14 @@ with st.expander("数据导出", expanded=False):
             data=export_posts_csv(),
             file_name="freelake_posts.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
         col_b.download_button(
             label=":material/download: 导出文章 (JSON)",
             data=export_posts_json(),
             file_name="freelake_posts.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 
     with tab_comments:
@@ -342,14 +338,14 @@ with st.expander("数据导出", expanded=False):
             data=export_comments_csv(),
             file_name="freelake_comments.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
         col_b.download_button(
             label=":material/download: 导出评论 (JSON)",
             data=export_comments_json(),
             file_name="freelake_comments.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 # endregion
 

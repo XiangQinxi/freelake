@@ -1,6 +1,6 @@
 import streamlit as st
-from api import User
 
+from api import User
 
 user = User()
 state = st.session_state

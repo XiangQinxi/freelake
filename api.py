@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import secrets
 import typing
 import uuid
 
@@ -44,6 +45,17 @@ def execute_sql(query: str) -> list[dict[str, str]]:
     return list(db.execute(query).dicts())
 
 
+def generate_sk_key(byte_length=40):
+    """
+    生成以 'sk' 开头的安全随机密钥。
+    :param byte_length: 随机部分的字节数（结果长度约为 byte_length * 2 的十六进制形式）
+    :return: 形如 'sk-' + 十六进制字符串的密钥
+    """
+    random_bytes = secrets.token_bytes(byte_length)
+    hex_part = random_bytes.hex()  # 每个字节转成两个十六进制字符
+    return "sk-" + hex_part
+
+
 # region 数据库模型
 class BaseModel(Model):
     class Meta:
@@ -60,6 +72,7 @@ class _User(BaseModel):
     description = TextField(default="这个用户有点懒，什么也没留下~")
     avatar = CharField(default="default_avatar.jpeg")  # 头像文件地址
     role = CharField(default="user")
+    secret_key = CharField(max_length=40, default=generate_sk_key())
 
     def __str__(self):
         return self.userid
@@ -104,13 +117,37 @@ class _Bookmark(BaseModel):
 # endregion
 
 
-db.connect()
-db.create_tables([_User, _Post, _Comment, _Like, _Bookmark], safe=True)
+class Config:
+    config = {}
+
+    def __init__(self):
+        self.load()
+
+    def load(self):
+        with open("config.toml", "r+", encoding="utf-8") as f:
+            self.config = toml.load(f)
+
+    def save(self):
+        with open("config.toml", "w+", encoding="utf-8") as f:
+            toml.dump(self.config, f)
 
 
 def sha256(value):
     """获取哈希加密加盐后的文本"""
     return hashlib.sha256((value + salt).encode()).hexdigest()
+
+
+db.connect()
+db.create_tables([_User, _Post, _Comment, _Like, _Bookmark], safe=True)
+config = Config().config
+if _User.get_or_none(_User.userid == config["admin"]["userid"]) is None:
+    _User.create(
+        userid=config["admin"]["userid"],
+        username=config["admin"]["username"],
+        password=sha256(config["admin"]["password"]),
+        role=admin,
+        created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
 
 # region 数据库接口
@@ -135,14 +172,33 @@ class User:
         else:
             return False
 
-    def login(self, userid: str, password: str) -> bool:
+    def login(self, userid: str | None, password: str | None) -> bool:
         """登录账号，如果用户名与其密码对应上则返回`True`"""
-        if self.exists(userid):
-            user = _User.get(_User.userid == userid)
-            return user.password == sha256(password)
+        if userid and password:
+            if self.exists(userid):
+                user = _User.get(_User.userid == userid)
+                return user.password == sha256(password)
+            else:
+                return False
         return False
 
     check = login
+
+    def check_admin(
+        self,
+        secret_key: str | None,
+        *,
+        admin_userid: str | None = None,
+        admin_password: str | None = None,
+    ) -> bool | None:
+        """检查是否为管理员"""
+        if self.check(admin_userid, admin_password):
+            if self.get_config(admin_userid)["role"] == admin:
+                return True
+        user = _User.get_or_none(_User.secret_key == secret_key)
+        if user:
+            return user.role == admin
+        return None
 
     @staticmethod
     def exists(userid: str) -> bool:
@@ -155,7 +211,7 @@ class User:
         return list(_User.select().dicts())
 
     @staticmethod
-    def get_config(userid: str) -> dict[str, str] | None:
+    def get_config(userid: str | None) -> dict[str, str] | None:
         """获取用户配置"""
         user = _User.get_or_none(_User.userid == userid)
         if user:
@@ -167,6 +223,14 @@ class User:
                 "role": user.role,
                 "avatar": user.avatar,
             }
+        return None
+
+    @staticmethod
+    def get_secret_key(userid: str) -> str | None:
+        """获取用户密钥"""
+        user = _User.get_or_none(_User.userid == userid)
+        if user:
+            return user.secret_key
         return None
 
     def modify(
@@ -181,9 +245,11 @@ class User:
         # 高级选项
         role: str | None = None,
         new_password: str | None = None,
+        # 高级权限
+        admin_secret_key: str | None = None,
     ) -> bool:
         """修改用户配置"""
-        if self.check(userid, password):
+        if self.check(userid, password) or self.check_admin(admin_secret_key):
             user = _User.get_or_none(_User.userid == userid)
             if username:
                 user.username = username
@@ -199,20 +265,26 @@ class User:
             return True
         return False
 
-    @property
-    def count(self) -> int:
+    @staticmethod
+    def count() -> int:
         return _User.select().count()
 
-    @staticmethod
-    def delete(userid: str) -> bool:
-        try:
-            user = _User.get_or_none(_User.userid == userid)
-            if not user:
+    def delete(
+        self,
+        userid: str,
+        password: str | None,
+        *,
+        admin_secret_key: str | None = None,
+    ) -> bool:
+        if self.check(userid, password) or self.check_admin(admin_secret_key):
+            try:
+                user = _User.get_or_none(_User.userid == userid)
+                if not user:
+                    return False
+                user.delete_instance()
+                return True
+            except Exception:
                 return False
-            user.delete_instance()
-            return True
-        except Exception:
-            return False
 
 
 class Post:
@@ -653,21 +725,6 @@ def export_comments_json() -> bytes:
 
 
 # endregion
-
-
-class Config:
-    config = {}
-
-    def __init__(self):
-        self.load()
-
-    def load(self):
-        with open("config.toml", "r+", encoding="utf-8") as f:
-            self.config = toml.load(f)
-
-    def save(self):
-        with open("config.toml", "w+", encoding="utf-8") as f:
-            toml.dump(self.config, f)
 
 
 # region 管理员工具

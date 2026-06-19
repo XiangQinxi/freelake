@@ -2,16 +2,18 @@ import time
 
 import streamlit as st
 
-from api import save_avatar, User
+from api import User, save_avatar
 
 st.page_link("pages/home.py", label="返回主页")
+
+st.subheader("用户信息管理")
 
 user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
 state = st.session_state
 
 if userconfig:
-    with st.expander("当前用户信息", expanded=True):
+    with st.container(border=True):
         st.image(userconfig["avatar"], width=250)
         st.table(
             {
