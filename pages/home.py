@@ -85,8 +85,17 @@ def edit_post(post):
 # region 常用方法
 def basic_information(post):
     col_1, col_2, col_3 = st.columns([0.1, 0.8, 0.1])
+
+    _config = user.get_config(post["authorid"])
+    if _config:
+        avatar = _config["avatar"]
+        username = _config["username"]
+    else:
+        avatar = "default_avatar.jpeg"
+        username = "用户已注销"
+
     col_1.image(
-        user.get_config(post["authorid"])["avatar"],
+        avatar,
         width=55,
         link=f"user_config.py?user_id={post['authorid']}",
     )
@@ -112,9 +121,7 @@ def basic_information(post):
             st.badge(tag, color="primary")
     st.table(
         {
-            ":material/person: 作者名称": user.get_config(post["authorid"])[
-                "username"
-            ],  # NOQA
+            ":material/person: 作者名称": username,  # NOQA
             ":material/access_time: 发布时间": post["created_at"],
             ":material/info: 文章ID": post["id"],
         },

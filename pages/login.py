@@ -22,11 +22,14 @@ with st.form("Login"):
         else:
             if user.login(userid, password):
                 st.success("登录成功！")
+                secretkey = User.get_secret_key(userid)
 
                 cookies["userid"] = userid
                 cookies["password"] = password
+                cookies["secretkey"] = secretkey
                 state["userid"] = userid
                 state["password"] = password
+                state["secretkey"] = secretkey
                 time.sleep(2)
 
                 st.rerun()

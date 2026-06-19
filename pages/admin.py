@@ -4,14 +4,29 @@ import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
-from api import (Attachment, Post, User, delete_comment_by_id,
-                 delete_orphaned_attachments, delete_orphaned_comments,
-                 execute_sql, export_comments_csv, export_comments_json,
-                 export_posts_csv, export_posts_json, export_users_csv,
-                 export_users_json, format_size, get_all_attachments,
-                 get_attachment_stats, get_comment_summary,
-                 get_orphaned_attachments, get_orphaned_comments,
-                 search_comments, sha256)
+from api import (
+    Attachment,
+    Post,
+    User,
+    delete_comment_by_id,
+    delete_orphaned_attachments,
+    delete_orphaned_comments,
+    execute_sql,
+    export_comments_csv,
+    export_comments_json,
+    export_posts_csv,
+    export_posts_json,
+    export_users_csv,
+    export_users_json,
+    format_size,
+    get_all_attachments,
+    get_attachment_stats,
+    get_comment_summary,
+    get_orphaned_attachments,
+    get_orphaned_comments,
+    search_comments,
+    sha256,
+)
 
 st.page_link("pages/home.py", label="返回主页")
 
@@ -53,21 +68,17 @@ with st.expander("用户管理", expanded=True):
     with st.container(border=True):
         col_a, col_b, col_c = st.columns(3)
         target_uid = col_a.text_input("目标用户 ID", key="role_userid")
-        new_role = col_b.selectbox("新角色", ["user", "admin"], key="new_role")
-        secret_key = col_c.text_input("密钥", type="password", key="role_secret")
+        new_role = col_b.selectbox("新角色", ["USER", "ADMIN"], key="new_role")
         if st.button("修改角色", key="modify_role_btn"):
             if not target_uid:
                 st.warning("请输入目标用户 ID")
-            elif not secret_key:
-                st.warning("请输入密钥")
             else:
                 try:
                     if user.modify(
                         target_uid,
                         None,
                         role=new_role,
-                        admin_userid=state["userid"],
-                        admin_password=state["password"],
+                        admin_secret_key=state["secretkey"],
                     ):
                         st.success(f"已修改 {target_uid} 的角色为 {new_role}")
                         st.rerun()
@@ -91,7 +102,7 @@ with st.expander("用户管理", expanded=True):
             col_x, col_y = st.columns(2, vertical_alignment="bottom")
             if col_x.button("确认删除", type="primary", key="confirm_del_user"):
                 try:
-                    if user.delete(confirm_uid):
+                    if user.delete(confirm_uid, None, admin_secret_key=state["secretkey"]):
                         st.success(f"已删除用户 {confirm_uid}")
                         del st.session_state["del_user_confirm"]
                         st.rerun()

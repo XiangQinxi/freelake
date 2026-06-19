@@ -35,7 +35,6 @@ login_page = st.Page("pages/login.py", title=":material/login: 登录")
 register_page = st.Page("pages/register.py", title=":material/person: 注册")
 logout_page = st.Page("pages/logout.py", title=":material/logout: 退出登录")
 userconfig_page = st.Page("pages/user_config.py", title=":material/settings: 用户配置")
-upgrade_page = st.Page("pages/upgrade.py", title=":material/upgrade: 升级管理员")
 admin_page = st.Page("pages/admin.py", title=":material/security: 管理员页面")
 image_generate_page = st.Page(
     "pages/image_generate.py", title=":material/auto_awesome: 图片生成"
@@ -49,9 +48,7 @@ if not check_by_state():
 else:
     account_pages.append(publish_page)
     account_pages.append(userconfig_page)
-    if user.get_config(state["userid"]).get("role") != admin:  # NOQA
-        account_pages.append(upgrade_page)
-    else:
+    if user.get_config(state["userid"]).get("role") == admin:  # NOQA
         account_pages.append(admin_page)
         account_pages.append(image_generate_page)
     account_pages.append(logout_page)
