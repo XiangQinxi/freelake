@@ -1,8 +1,13 @@
-import time
+"""
+FreeLake 用户配置（pages/user_config.py）
+=========================================
 
+个人资料管理页面：查看当前用户信息、修改昵称/自我介绍/头像、修改密码、
+退出登录。修改密码成功后会把新密码同步回会话与 Cookie，避免被登出。
+"""
 import streamlit as st
 
-from api import User, save_avatar
+from api import User, get_avatar_bytes, save_avatar
 
 st.page_link("pages/home.py", label="返回主页")
 
@@ -14,7 +19,7 @@ state = st.session_state
 
 if userconfig:
     with st.container(border=True):
-        st.image(userconfig["avatar"], width=250)
+        st.image(get_avatar_bytes(userconfig["avatar"]), width=250)
         st.table(
             {
                 ":material/key: 用户ID": userconfig.get("userid"),
@@ -61,8 +66,7 @@ if userconfig:
                         description=new_description,
                         avatar=meta.get("path") if new_avatar else None,
                     )
-                    st.success("用户信息修改成功！")
-                    time.sleep(2)
+                    st.toast("用户信息修改成功！")
                     st.rerun()
 
         if st.button("修改用户信息"):
@@ -79,11 +83,14 @@ if userconfig:
                         password=original_password,
                         new_password=new_password,
                     )
-                    st.success("密码修改成功！")
+                    # 同步更新会话与 cookie 中的密码，避免改密后被登出
+                    state["password"] = new_password
+                    state["cookies"]["password"] = new_password
+                    st.toast("密码修改成功！")
                     st.rerun()
         if st.button("退出登录", type="primary"):
             st.switch_page("logout.py")
 else:
     st.error("用户信息加载失败，请重新登录！")
-    time.sleep(2)
+    st.toast("请重新登录")
     st.switch_page("login.py")

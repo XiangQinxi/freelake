@@ -1,13 +1,35 @@
+"""
+FreeLake 首页（pages/home.py）
+==============================
+
+核心页面，根据 URL 查询参数承担三种视图：
+
+- ``?user_id=xxx``        —— 查看某用户的个人资料
+- ``?post_id=xxx``        —— 查看文章详情（内容、附件、评论区）
+- 无参数                  —— 主页：搜索 / 标签筛选 / 收藏筛选 + 文章列表分页
+
+性能约定：列表页对作者配置与「最新一条评论」使用批量查询
+（``User.get_configs`` / ``Post.get_last_comments``），附件文件只读取一次，
+避免 N+1 查询与重复读盘。
+"""
 import base64
 import io
 import json
-import time
 from zipfile import ZipFile
 
 import streamlit as st
 from streamlit_extras.pagination import pagination
 
-from api import Attachment, Bookmark, Like, Post, User, format_size, sha256
+from api import (
+    Attachment,
+    Bookmark,
+    Like,
+    Post,
+    User,
+    format_size,
+    get_avatar_bytes,
+    sha256,
+)
 from api2 import check_by_state
 from const import admin, tags
 
@@ -39,8 +61,7 @@ def confirm_delete_post(post_id):
     if st.button("确认删除", type="primary"):
         try:
             if Post.delete(post_id):
-                st.success("文章删除成功！")
-                time.sleep(2)
+                st.toast("文章删除成功！")
                 st.rerun()
             else:
                 st.error("文章不存在或已被删除")
@@ -72,8 +93,7 @@ def edit_post(post):
             st.error("请输入内容！")
         else:
             if Post.edit(post["id"], new_title, new_content, new_tags):
-                st.success("文章修改成功！")
-                time.sleep(2)
+                st.toast("文章修改成功！")
                 st.rerun()
             else:
                 st.error("文章修改失败！")
@@ -83,10 +103,15 @@ def edit_post(post):
 
 
 # region 常用方法
-def basic_information(post):
+def basic_information(post, _config=None):
+    """展示文章的基础信息卡片：作者头像、标题、操作菜单、标签与元信息表。
+
+    _config: 作者的用户配置字典；传入时跳过重复查询（列表页批量传入）。
+    """
     col_1, col_2, col_3 = st.columns([0.1, 0.8, 0.1])
 
-    _config = user.get_config(post["authorid"])
+    if _config is None:
+        _config = user.get_config(post["authorid"])
     if _config:
         avatar = _config["avatar"]
         username = _config["username"]
@@ -95,7 +120,7 @@ def basic_information(post):
         username = "用户已注销"
 
     col_1.image(
-        avatar,
+        get_avatar_bytes(avatar),
         width=55,
         link=f"user_config.py?user_id={post['authorid']}",
     )
@@ -130,7 +155,13 @@ def basic_information(post):
     )
 
 
-def preview(att, container, saved_name, auto_preview=True):
+def preview(att, container, saved_name, attpassword="", auto_preview=True):
+    """在指定容器中渲染附件的缩略图/类型图标。
+
+    - 图片：可访问时生成缩略图，否则显示图片占位图标
+    - 视频/音频/其他：显示对应的 Material 图标
+    attpassword: 附件专属密码（哈希），为空表示无需密码。
+    """
     if att.get("type", "").startswith("image/"):
         if (
             not attpassword
@@ -157,6 +188,7 @@ def preview(att, container, saved_name, auto_preview=True):
 
 
 def like_and_bookmarked(post):
+    """点赞与收藏按钮组（当前在详情页调用处被注释，保留备用）。"""
     with st.container(horizontal=True):
         liked = (
             Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
@@ -198,7 +230,7 @@ if user_id:
         st.rerun()
     userconfig = user.get_config(user_id)
     if userconfig:
-        st.image(userconfig["avatar"], width=250)
+        st.image(get_avatar_bytes(userconfig["avatar"]), width=250)
         st.table(
             {
                 ":material/key: 用户ID": userconfig.get("userid"),
@@ -219,7 +251,10 @@ else:
         if st.button("返回主页", type="primary"):
             del st.query_params["post_id"]
             st.rerun()
-        post = Post.get(int(post_id))
+        try:
+            post = Post.get(int(post_id))
+        except (TypeError, ValueError):
+            post = None
         if post:
             basic_information(post)
 
@@ -247,42 +282,44 @@ else:
                     if st.button("检查", type="primary"):
                         state["attpassword"] = sha256(attpwd)
                         if sha256(attpwd) == attpassword:
-                            st.success("验证成功！")
-                            time.sleep(1)
+                            st.toast("验证成功！")
                             st.rerun()
                 else:
+                    # 附件文件只读取一次，避免多次重复读盘
+                    files = {}
+                    missing = set()
                     for att in attachments:
                         saved_name = att.get("saved_name", "")
-                        file_bytes = (
-                            Attachment.get_file(saved_name) if saved_name else b""
-                        )
-                        if not file_bytes and saved_name:
+                        if not saved_name:
+                            continue
+                        data = Attachment.get_file(saved_name)
+                        if data:
+                            files[saved_name] = data
+                        else:
+                            missing.add(saved_name)
+
+                    for att in attachments:
+                        saved_name = att.get("saved_name", "")
+                        if saved_name in missing:
                             st.warning(
                                 f"附件 {att.get('original_name', '未命名')} 文件已丢失"
                             )
-                            continue
-                        b64 = base64.b64encode(file_bytes).decode()
-                        if att.get("type", "").startswith("image/"):
+                        elif saved_name and att.get("type", "").startswith("image/"):
+                            b64 = base64.b64encode(files[saved_name]).decode()
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                     st.divider()
                     st.caption("📎 附件")
 
                     zip_buffer = io.BytesIO()
-                    missing_count = 0
                     with ZipFile(zip_buffer, "w") as zf:
                         for att in attachments:
-                            saved_name = att.get("saved_name", "")
-                            file_bytes = (
-                                Attachment.get_file(saved_name) if saved_name else b""
-                            )
-                            if file_bytes:
+                            data = files.get(att.get("saved_name", ""))
+                            if data:
                                 zf.writestr(
-                                    att.get("original_name", "download"), file_bytes
+                                    att.get("original_name", "download"), data
                                 )
-                            else:
-                                missing_count += 1
-                    if missing_count:
-                        st.warning(f"有 {missing_count} 个附件文件已丢失，无法打包")
+                    if missing:
+                        st.warning(f"有 {len(missing)} 个附件文件已丢失，无法打包")
                     st.download_button(
                         label=":material/folder_zip: 下载所有附件 (ZIP)",
                         data=zip_buffer.getvalue(),
@@ -297,15 +334,13 @@ else:
                             [0.1, 0.5, 0.2, 0.2], vertical_alignment="center"
                         )
                         saved_name = att.get("saved_name", "")
-                        file_bytes = (
-                            Attachment.get_file(saved_name) if saved_name else b""
-                        )
+                        file_bytes = files.get(saved_name, b"")
 
-                        preview(att, col_a, saved_name, auto_preview=False)
+                        preview(att, col_a, saved_name, attpassword, auto_preview=False)
 
                         col_b.write(f"**{att.get('original_name', '未命名')}**")
                         col_c.write(f"{format_size(att.get('size', 0))}")
-                        if not file_bytes and saved_name:
+                        if saved_name in missing:
                             col_c.write(":material/warning: 文件已丢失")
                         with col_d.popover("..."):
                             if file_bytes:
@@ -349,8 +384,7 @@ else:
                 else:
                     if new_comment:
                         Post.add_comment(int(post_id), state.get("userid"), new_comment)
-                        st.success("评论提交成功")
-                        time.sleep(2)
+                        st.toast("评论提交成功")
                         st.rerun()
                     else:
                         st.warning("请输入评论内容！")
@@ -369,7 +403,7 @@ else:
                                 [0.08, 0.82, 0.1], vertical_alignment="top"
                             )
                             col_a.image(
-                                cfg["avatar"],
+                                get_avatar_bytes(cfg["avatar"]),
                                 width=40,
                                 link=f"user_config.py?user_id={comment['userid']}",
                             )
@@ -396,8 +430,7 @@ else:
                                             pass
                                         case ":material/delete: 删除":
                                             if Post.delete_comment(int(post_id), index):
-                                                st.success("评论删除成功！")
-                                                time.sleep(2)
+                                                st.toast("评论删除成功！")
                                                 st.rerun()
                                             else:
                                                 st.error("评论删除失败！")
@@ -419,7 +452,8 @@ else:
                     "pages/user_config.py",
                     label="用户配置",
                 )
-                if user.get_config(state["userid"])["role"] == admin:
+                current_cfg = user.get_config(state["userid"]) or {}
+                if current_cfg.get("role") == admin:
                     st.page_link(
                         "pages/admin.py",
                         label="管理员页面",
@@ -480,52 +514,59 @@ else:
             else:
                 posts = Post.get_with_paginate(page, 5)
 
-            for post in posts:
-                # 筛选
-                if selected_tag:
-                    if selected_tag not in post["tags"]:
-                        continue
-                post = Post.get(post["id"])
-                if post is None:
-                    continue
-                if show_bookmarked and state.get("userid"):
-                    if post["id"] not in Bookmark.get_bookmarked_post_ids(
-                        state["userid"]
-                    ):
-                        continue
+            # 先在内存中完成标签 / 收藏筛选，避免多余的查询
+            if selected_tag:
+                posts = [p for p in posts if selected_tag in (p.get("tags") or [])]
+            if show_bookmarked and state.get("userid"):
+                bookmarked_ids = set(Bookmark.get_bookmarked_post_ids(state["userid"]))
+                posts = [p for p in posts if p["id"] in bookmarked_ids]
 
-                with st.container(border=True):
-                    basic_information(post)
-                    st.markdown(post["content"][0:40] + "...")
+            if not posts:
+                st.info("没有找到相关文章。")
+            else:
+                # 批量查询作者配置与每篇最新评论，避免 N+1
+                author_configs = User.get_configs(p["authorid"] for p in posts)
+                last_comments = Post.get_last_comments(posts)
 
-                    # like_and_bookmarked(post)
+                for post in posts:
+                    with st.container(border=True):
+                        basic_information(post, author_configs.get(post["authorid"]))
+                        st.markdown((post["content"] or "")[:40] + "...")
 
-                    if st.button("查看详细内容", key=f"view_{post['id']}"):
-                        params["post_id"] = str(post["id"])
-                        st.rerun()
-                    # st.info(post)
-                    if post.get("comments"):
-                        with st.expander("最新一条评论", expanded=True):
-                            last_comment = json.loads(post.get("comments")[-1])
-                            last_comment_user = user.get_config(last_comment["userid"])
-                            st.markdown(
-                                f"{last_comment_user['username']}： {last_comment['content']} （{last_comment['created_at']}）"
-                            )
-                    attachments = post.get("attachments", [])
-                    if attachments:
-                        st.divider()
-                        st.caption(":material/attach_file: 附件")
-                        attpassword = post.get("attpassword")
+                        if st.button("查看详细内容", key=f"view_{post['id']}"):
+                            params["post_id"] = str(post["id"])
+                            st.rerun()
 
-                        for att in attachments:
-                            col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
-                            saved_name = att.get("saved_name", "")
-                            file_bytes = (
-                                Attachment.get_file(saved_name) if saved_name else b""
-                            )
+                        last = last_comments.get(post["id"])
+                        if last:
+                            with st.expander("最新一条评论", expanded=True):
+                                last_user = author_configs.get(last["userid"])
+                                name = (
+                                    last_user["username"]
+                                    if last_user
+                                    else "用户已注销"
+                                )
+                                st.markdown(
+                                    f"**{name}**：{last['content']} （{last['created_at']}）"
+                                )
 
-                            preview(att, col_a, saved_name)
+                        attachments = post.get("attachments", [])
+                        if attachments:
+                            st.divider()
+                            st.caption(":material/attach_file: 附件")
+                            attpassword = post.get("attpassword")
+                            files = {
+                                att.get("saved_name"): Attachment.get_file(
+                                    att.get("saved_name")
+                                )
+                                for att in attachments
+                                if att.get("saved_name")
+                            }
 
-                            col_b.write(f"**{att.get('original_name', '未命名')}**")
-                            col_c.write(f"{format_size(att.get('size', 0))}")
+                            for att in attachments:
+                                col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
+                                saved_name = att.get("saved_name", "")
+                                preview(att, col_a, saved_name, attpassword)
+                                col_b.write(f"**{att.get('original_name', '未命名')}**")
+                                col_c.write(f"{format_size(att.get('size', 0))}")
     # endregion

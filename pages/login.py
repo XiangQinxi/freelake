@@ -1,5 +1,12 @@
-import time
+"""
+FreeLake 登录（pages/login.py）
+==============================
 
+登录表单：校验用户ID与密码（api.User.login），成功后把凭据写入加密
+Cookie 与会话状态，并跳转/刷新。注意：登录后的 rerun 依赖 Cookie 管理
+组件的回写，因此表单提交后立即 rerun 即可（组件队列会保证新值在下一次
+执行时可见）。
+"""
 import streamlit as st
 
 from api import User
@@ -21,7 +28,6 @@ with st.form("Login"):
             st.error("密码不能为空")
         else:
             if user.login(userid, password):
-                st.success("登录成功！")
                 secretkey = User.get_secret_key(userid)
 
                 cookies["userid"] = userid
@@ -30,8 +36,7 @@ with st.form("Login"):
                 state["userid"] = userid
                 state["password"] = password
                 state["secretkey"] = secretkey
-                time.sleep(2)
-
+                st.toast("登录成功！")
                 st.rerun()
             else:
                 st.error("用户ID或密码错误")

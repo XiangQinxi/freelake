@@ -1,10 +1,19 @@
+"""
+FreeLake 图片生成（pages/image_generate.py）
+============================================
+
+管理员专属页面：调用 OpenAI 兼容接口（gpt-image-2）根据文字描述生成
+图片，或对上传的图片进行编辑。API 密钥与接口地址来自
+``.streamlit/secrets.toml`` 的 ``[ai]`` 段。
+
+注意：页面级 ``st.set_page_config`` 不可用——入口 main.py 已统一设置，
+在 st.navigation 的页面中重复调用会报错。
+"""
 import base64
 import urllib.request
 
 import streamlit as st
 from openai import OpenAI
-
-st.set_page_config(page_title="图片生成", page_icon="🎨")
 
 st.page_link("pages/home.py", label="返回主页")
 st.subheader("图片生成")

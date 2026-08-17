@@ -1,3 +1,20 @@
+"""
+FreeLake 管理员页面（pages/admin.py）
+=====================================
+
+管理员专属后台，按区域组织：
+
+- 统计概览：用户 / 文章 / 评论 / 附件数量与大小
+- 用户管理：查看、搜索、改角色、删除（带二次确认）
+- 文章管理：查看、搜索、删除
+- 评论管理：全部评论、搜索评论、孤立评论清理
+- 附件管理：附件列表、孤立附件清理、附件目录文件浏览
+- 系统工具：原始 SQL 查询（⚠️ 谨慎）、SHA256 工具、数据库大小
+- 数据导出：用户 / 文章 / 评论 的 CSV 与 JSON 导出
+
+安全说明：页面展示的用户数据已剔除 password / secret_key 等敏感列；
+文件浏览器只指向 attachments 目录而非源码目录。
+"""
 import os
 
 import pandas as pd
@@ -5,6 +22,7 @@ import streamlit as st
 from streamlit_file_browser import st_file_browser
 
 from api import (
+    ATTACHMENTS_DIR,
     Attachment,
     Post,
     User,
@@ -53,6 +71,10 @@ with st.expander("用户管理", expanded=True):
 
     st.metric("用户总数", user.count(), border=True)
     df = pd.DataFrame(user.get_all()).astype(str)
+    # 不展示密码哈希与密钥等敏感列
+    for col in ("password", "secret_key"):
+        if col in df.columns:
+            df = df.drop(columns=[col])
     st.dataframe(df, width="stretch")
 
     with st.container(border=True):
@@ -190,12 +212,13 @@ with st.expander("文章管理", expanded=True):
 
 # region 评论管理
 with st.expander("评论管理", expanded=True):
-    st.metric("评论总数", len(get_comment_summary()), border=True)
+    comment_summary = get_comment_summary()
+    st.metric("评论总数", len(comment_summary), border=True)
 
     tab1, tab2, tab3 = st.tabs(["全部评论", "搜索评论", "孤立评论清理"])
 
     with tab1:
-        df = pd.DataFrame(get_comment_summary()).astype(str)
+        df = pd.DataFrame(comment_summary).astype(str)
         st.dataframe(df, width="stretch")
 
         with st.container(border=True):
@@ -281,15 +304,16 @@ with st.expander("附件管理", expanded=True):
         with st.container(border=True):
             st.caption("孤立文件列表")
             for f in orphans:
-                fp = os.path.join("attachments", f)
-                size = os.path.getsize(os.path.join(os.path.dirname(__file__), fp))
+                fp = os.path.join(ATTACHMENTS_DIR, f)
+                size = os.path.getsize(fp)
                 st.text(f"{f} ({format_size(size)})")
 # endregion
 
 # region 系统工具
 with st.expander("系统工具", expanded=False):
+    st.warning("⚠️ 此处的 SQL 查询将直接作用于数据库，请谨慎操作！")
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-    query = col1.text_input("请输入SQL查询语句", placeholder="例如：SELECT * FROM user")
+    query = col1.text_input("请输入SQL查询语句", placeholder="例如：SELECT * FROM _user")
     if col2.button("执行查询"):
         if query:
             try:
@@ -307,7 +331,7 @@ with st.expander("系统工具", expanded=False):
             st.code(sha256(original_text))
 
     with st.container(border=True):
-        db_path = os.path.join(os.path.dirname(__file__), "data.db")
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.db")
         if os.path.exists(db_path):
             st.metric("数据库大小", format_size(os.path.getsize(db_path)), border=True)
 # endregion
@@ -370,8 +394,9 @@ with st.expander("数据导出", expanded=False):
 
 # region 文件管理
 with st.expander("文件管理", expanded=True):
+    st.caption("浏览附件目录（attachments/），可上传或删除附件文件")
     event = st_file_browser(
-        os.path.dirname(os.path.abspath(__file__)),
+        ATTACHMENTS_DIR,
         key="deep",
         show_choose_file=True,
         show_delete_file=True,

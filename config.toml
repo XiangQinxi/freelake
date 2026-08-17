@@ -1,4 +1,4 @@
+# 管理员基础信息（密码请放在 .streamlit/secrets.toml 的 [admin] 段或环境变量中，不要提交到仓库）
 [admin]
 userid = "xqx"
 username = "XiangQinxi"
-password = "xiangqinxi666"

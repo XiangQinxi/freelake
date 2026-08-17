@@ -1,5 +1,4 @@
 [server]
-enableStaticServing = true
 runOnSave = true
 
 [theme]

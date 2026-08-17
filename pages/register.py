@@ -1,5 +1,10 @@
-import time
+"""
+FreeLake 注册（pages/register.py）
+==================================
 
+注册表单：校验密码强度（至少 8 位且包含字母与数字）、两次输入一致、
+用户ID不重复后创建账号，并直接以新账号登录（写入 Cookie 与会话状态）。
+"""
 import streamlit as st
 
 from api import User
@@ -48,14 +53,15 @@ with st.form("Register"):
                 pass
             else:
                 if user.register(userid, username, password):  # NOQA
-                    st.success("注册成功！")
+                    secretkey = User.get_secret_key(userid)
 
                     cookies["userid"] = userid
                     cookies["password"] = password
+                    cookies["secretkey"] = secretkey
                     state["userid"] = userid
                     state["password"] = password
-                    time.sleep(2)
-
+                    state["secretkey"] = secretkey
+                    st.toast("注册成功！")
                     st.rerun()
                 else:
                     st.error("用户ID已存在")

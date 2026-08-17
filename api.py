@@ -1,6 +1,27 @@
+"""
+FreeLake 数据层（api.py）
+========================
+
+基于 peewee + SQLite 的论坛数据访问层，提供用户、文章、评论、点赞、
+收藏、附件等全部业务数据的读写接口，以及密码哈希、数据导出、管理员
+工具等能力。
+
+设计约定：
+- 数据库模型类以下划线开头（``_User``/``_Post``/...），对外暴露的业务接口
+  类无下划线（``User``/``Post``/``Attachment``/``Like``/``Bookmark``）
+- 时间统一使用 ``YYYY-MM-DD HH:MM:SS`` 字符串格式存入数据库
+- 用户密码：新注册用户使用 PBKDF2-SHA256 加盐哈希（``hash_password``），
+  旧版 sha256 密码在登录校验通过后自动升级为 PBKDF2
+- 附件/头像保存在项目根目录 ``attachments/`` 与 ``avatars/`` 目录，
+  数据库仅保存文件名（相对路径），便于跨机器迁移
+- 导入本模块时会自动建表，并引导创建管理员账号（凭据来自 secrets/环境变量）
+
+依赖：peewee、Pillow、toml、streamlit（仅用于 secrets 与缩略图缓存）。
+"""
 import base64
 import datetime
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -8,6 +29,7 @@ import secrets
 import typing
 import uuid
 
+import streamlit as st
 import toml
 from peewee import *
 from PIL import Image
@@ -20,7 +42,6 @@ salt = "freelake"
 
 # 附件存储目录（在项目根目录下创建 attachments 文件夹）
 DIR = os.path.dirname(__file__)
-ATTACHMENTS_DIR = os.path.join(DIR, "attachments")  # NOQA
 ATTACHMENTS_DIR = os.path.join(DIR, "attachments")  # NOQA
 AVATARS_DIR = os.path.join(DIR, "avatars")  # NOQA
 
@@ -72,7 +93,8 @@ class _User(BaseModel):
     description = TextField(default="这个用户有点懒，什么也没留下~")
     avatar = CharField(default="default_avatar.jpeg")  # 头像文件地址
     role = CharField(default="user")
-    secret_key = CharField(max_length=40, default=generate_sk_key())
+    # 注意：default 必须传可调用对象（而非调用结果），否则所有用户会共用同一个密钥
+    secret_key = CharField(max_length=100, default=lambda: generate_sk_key(16))
 
     def __str__(self):
         return self.userid
@@ -132,22 +154,93 @@ class Config:
             toml.dump(self.config, f)
 
 
+def admin_credentials() -> dict:
+    """按优先级获取管理员凭据：st.secrets > 环境变量 > config.toml。
+
+    密码不应提交到仓库，本地开发请写入 .streamlit/secrets.toml（已 gitignore）。
+    """
+    # 1. st.secrets（本地 .streamlit/secrets.toml 或 Streamlit Cloud 后台）
+    try:
+        for section in ("admin", "default_admin"):
+            item = st.secrets.get(section, {}) or {}
+            if item.get("password"):
+                return {
+                    "userid": item.get("userid") or "admin",
+                    "username": item.get("username") or item.get("userid") or "Admin",
+                    "password": item["password"],
+                }
+    except Exception:
+        pass
+    # 2. 环境变量
+    env = {
+        "userid": os.environ.get("ADMIN_USERID"),
+        "username": os.environ.get("ADMIN_USERNAME"),
+        "password": os.environ.get("ADMIN_PASSWORD"),
+    }
+    if env.get("password"):
+        env["username"] = env["username"] or env["userid"] or "Admin"
+        return env
+    # 3. config.toml（仅作本地兜底，不应包含真实密码）
+    return Config().config.get("admin", {}) or {}
+
+
+def fix_duplicate_secret_keys():
+    """修复历史 bug：旧版本所有用户共用同一个 secret_key。"""
+    seen: set[str] = set()
+    for u in _User.select():
+        if not u.secret_key or u.secret_key in seen:
+            u.secret_key = generate_sk_key(16)
+            u.save()
+        else:
+            seen.add(u.secret_key)
+
+
 def sha256(value):
-    """获取哈希加密加盐后的文本"""
+    """获取哈希加密加盐后的文本（旧版用户密码与附件密码使用）"""
     return hashlib.sha256((value + salt).encode()).hexdigest()
+
+
+PBKDF2_ITERATIONS = 200_000
+
+
+def hash_password(password: str) -> str:
+    """使用 PBKDF2-SHA256 加盐哈希用户密码，返回自包含的存储字符串。"""
+    pw_salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), pw_salt.encode(), PBKDF2_ITERATIONS
+    ).hex()
+    return f"pbkdf2${PBKDF2_ITERATIONS}${pw_salt}${digest}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    """校验密码；兼容旧的 `sha256(明文+salt)` 存储格式。"""
+    if stored.startswith("pbkdf2$"):
+        try:
+            _, iterations, pw_salt, digest = stored.split("$", 3)
+            calc = hashlib.pbkdf2_hmac(
+                "sha256", password.encode(), pw_salt.encode(), int(iterations)
+            ).hex()
+        except (ValueError, TypeError):
+            return False
+        return hmac.compare_digest(calc, digest)
+    return hmac.compare_digest(sha256(password), stored)
 
 
 db.connect()
 db.create_tables([_User, _Post, _Comment, _Like, _Bookmark], safe=True)
-config = Config().config
-if _User.get_or_none(_User.userid == config["admin"]["userid"]) is None:
-    _User.create(
-        userid=config["admin"]["userid"],
-        username=config["admin"]["username"],
-        password=sha256(config["admin"]["password"]),
-        role=admin,
-        created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    )
+
+# 启动引导：创建管理员账号（凭据来自 secrets / 环境变量 / config.toml）
+_admin = admin_credentials()
+if _admin.get("userid") and _admin.get("password"):
+    if _User.get_or_none(_User.userid == _admin["userid"]) is None:
+        _User.create(
+            userid=_admin["userid"],
+            username=_admin.get("username") or _admin["userid"],
+            password=hash_password(_admin["password"]),
+            role=admin,
+            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+fix_duplicate_secret_keys()
 
 
 # region 数据库接口
@@ -164,7 +257,7 @@ class User:
             _User.create(
                 userid=userid,
                 username=username,
-                password=sha256(password),
+                password=hash_password(password),
                 role=role,
                 created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
@@ -175,11 +268,13 @@ class User:
     def login(self, userid: str | None, password: str | None) -> bool:
         """登录账号，如果用户名与其密码对应上则返回`True`"""
         if userid and password:
-            if self.exists(userid):
-                user = _User.get(_User.userid == userid)
-                return user.password == sha256(password)
-            else:
-                return False
+            user = _User.get_or_none(_User.userid == userid)
+            if user and verify_password(password, user.password):
+                # 旧版 sha256 密码校验成功后自动升级为 PBKDF2
+                if not user.password.startswith("pbkdf2$"):
+                    user.password = hash_password(password)
+                    user.save()
+                return True
         return False
 
     check = login
@@ -226,6 +321,24 @@ class User:
         return None
 
     @staticmethod
+    def get_configs(userids: typing.Iterable[str]) -> dict[str, dict[str, str]]:
+        """批量获取用户配置（单次查询），返回 {userid: config}"""
+        ids = {uid for uid in userids if uid}
+        if not ids:
+            return {}
+        return {
+            u.userid: {
+                "userid": u.userid,
+                "username": u.username,
+                "created_at": u.created_at,
+                "description": u.description,
+                "role": u.role,
+                "avatar": u.avatar,
+            }
+            for u in _User.select().where(_User.userid.in_(ids))
+        }
+
+    @staticmethod
     def get_secret_key(userid: str) -> str | None:
         """获取用户密钥"""
         user = _User.get_or_none(_User.userid == userid)
@@ -251,6 +364,8 @@ class User:
         """修改用户配置"""
         if self.check(userid, password) or self.check_admin(admin_secret_key):
             user = _User.get_or_none(_User.userid == userid)
+            if user is None:
+                return False
             if username:
                 user.username = username
             if description:
@@ -260,13 +375,14 @@ class User:
             if role:
                 user.role = role
             if new_password:
-                user.password = sha256(new_password)
+                user.password = hash_password(new_password)
             user.save()
             return True
         return False
 
     @staticmethod
     def count() -> int:
+        """用户总数"""
         return _User.select().count()
 
     def delete(
@@ -276,6 +392,7 @@ class User:
         *,
         admin_secret_key: str | None = None,
     ) -> bool:
+        """删除用户；需要用户密码或管理员密钥验证。"""
         if self.check(userid, password) or self.check_admin(admin_secret_key):
             try:
                 user = _User.get_or_none(_User.userid == userid)
@@ -346,18 +463,10 @@ class Post:
         return list(_Post.select().dicts())
 
     @staticmethod
-    def search(keyword: str) -> list[dict[str, str]]:
-        return (
-            _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
-            .order_by(_Post.id.desc())
-            .dicts()
-        )
-
-    @staticmethod
     def search_with_paginate(
         keyword: str, page: int, page_size: int
     ) -> list[dict[str, str]]:
+        """按关键词（标题或内容）搜索文章，返回指定页的数据。"""
         return (
             _Post.select()
             .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
@@ -368,6 +477,7 @@ class Post:
 
     @staticmethod
     def search_count(keyword: str) -> int:
+        """按关键词统计文章总数（用于分页）。"""
         return (
             _Post.select()
             .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
@@ -376,19 +486,35 @@ class Post:
 
     @staticmethod
     def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
+        """按发布时间倒序获取指定页的文章（不含评论详情）。"""
         return (
             _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
         )
 
     @staticmethod
     def get(_id: int) -> dict | None:
+        """获取文章详情，并把评论 ID 列表替换为评论内容（JSON 字符串列表）。
+
+        评论一次性批量查询，避免逐条查询（N+1）；若存在已被删除的评论 ID，
+        会自动清理文章的 comments 列表。
+        """
         post = _Post.select().where(_Post.id == _id).dicts().get_or_none()
         if not post:
             return None
+        comment_ids = post.get("comments") or []
+        # 单次查询取出全部评论，避免逐条查询（N+1）
+        comments_map = {}
+        if comment_ids:
+            comments_map = {
+                r["id"]: r
+                for r in _Comment.select()
+                .where(_Comment.id.in_(comment_ids))
+                .dicts()
+            }
         comments = []
         valid_ids = []
-        for cid in post.get("comments") or []:
-            comment = _Comment.select().where(_Comment.id == cid).dicts().get_or_none()
+        for cid in comment_ids:
+            comment = comments_map.get(cid)
             if comment:
                 comments.append(
                     json.dumps(
@@ -401,13 +527,31 @@ class Post:
                     )
                 )
                 valid_ids.append(cid)
-        if len(valid_ids) != len(post.get("comments") or []):
+        if len(valid_ids) != len(comment_ids):
             post_obj = _Post.get_or_none(_Post.id == _id)
             if post_obj:
                 post_obj.comments = valid_ids
                 post_obj.save()
         post["comments"] = comments
         return post
+
+    @staticmethod
+    def get_last_comments(posts: typing.Iterable[dict]) -> dict[int, dict]:
+        """批量获取每篇文章最新一条评论（单次查询），返回 {post_id: comment}。"""
+        ids = []
+        for p in posts:
+            cids = p.get("comments") or []
+            if cids:
+                ids.append(cids[-1])
+        result: dict[int, dict] = {}
+        if not ids:
+            return result
+        by_id = {r["id"]: r for r in _Comment.select().where(_Comment.id.in_(ids)).dicts()}
+        for p in posts:
+            cids = p.get("comments") or []
+            if cids and cids[-1] in by_id:
+                result[p["id"]] = by_id[cids[-1]]
+        return result
 
     @staticmethod
     def add_comment(
@@ -445,6 +589,7 @@ class Post:
 
     @staticmethod
     def count() -> int:
+        """文章总数"""
         return _Post.select().count()
 
 
@@ -482,9 +627,19 @@ class Attachment:
         }
 
     @staticmethod
+    @st.cache_data(ttl="10m", max_entries=256)
     def get_thumbnail_bytes(saved_name: str, max_width: int = 300) -> bytes:
+        """生成图片附件的缩略图（JPEG），结果按文件名缓存 10 分钟。
+
+        非图片或损坏的文件原样返回；文件缺失返回空字节。
+        """
         file_bytes = Attachment.get_file(saved_name)
-        img = Image.open(io.BytesIO(file_bytes))
+        if not file_bytes:
+            return b""
+        try:
+            img = Image.open(io.BytesIO(file_bytes))
+        except Exception:
+            return file_bytes
         if img.mode == "RGBA":
             img = img.convert("RGB")
         if img.width > max_width:
@@ -532,8 +687,11 @@ class Attachment:
 
 
 class Like:
+    """文章点赞：同一用户对同一文章只能点一次（记录在 _Like 表）。"""
+
     @staticmethod
     def toggle(postid: int, userid: str) -> bool:
+        """切换点赞状态，返回点赞后是否处于已点赞状态。"""
         like = _Like.get_or_none((_Like.postid == postid) & (_Like.userid == userid))
         if like:
             like.delete_instance()
@@ -544,6 +702,7 @@ class Like:
 
     @staticmethod
     def is_liked(postid: int, userid: str) -> bool:
+        """用户是否已点赞该文章。"""
         return (
             _Like.get_or_none((_Like.postid == postid) & (_Like.userid == userid))
             is not None
@@ -551,16 +710,21 @@ class Like:
 
     @staticmethod
     def count(postid: int) -> int:
+        """文章的点赞总数。"""
         return _Like.select().where(_Like.postid == postid).count()
 
     @staticmethod
     def get_liked_user_ids(postid: int) -> list[str]:
+        """获取点赞该文章的所有用户 ID。"""
         return [like.userid for like in _Like.select().where(_Like.postid == postid)]
 
 
 class Bookmark:
+    """文章收藏：同一用户对同一文章只能收藏一次（记录在 _Bookmark 表）。"""
+
     @staticmethod
     def toggle(postid: int, userid: str) -> bool:
+        """切换收藏状态，返回收藏后是否处于已收藏状态。"""
         bm = _Bookmark.get_or_none(
             (_Bookmark.postid == postid) & (_Bookmark.userid == userid)
         )
@@ -573,6 +737,7 @@ class Bookmark:
 
     @staticmethod
     def is_bookmarked(postid: int, userid: str) -> bool:
+        """用户是否已收藏该文章。"""
         return (
             _Bookmark.get_or_none(
                 (_Bookmark.postid == postid) & (_Bookmark.userid == userid)
@@ -582,6 +747,7 @@ class Bookmark:
 
     @staticmethod
     def get_bookmarked_post_ids(userid: str) -> list[int]:
+        """获取用户收藏的所有文章 ID。"""
         return [b.postid for b in _Bookmark.select().where(_Bookmark.userid == userid)]
 
 
@@ -593,7 +759,7 @@ def save_avatar(uploaded_file) -> dict:
         uploaded_file: streamlit 的上传文件对象 (UploadedFile)
 
     返回:
-        dict: 包含文件元数据的字典
+        dict: 包含文件元数据的字典（path 存相对文件名，便于跨机器迁移）
     """
     # 读取文件二进制数据
     file_bytes = uploaded_file.getvalue()
@@ -603,32 +769,53 @@ def save_avatar(uploaded_file) -> dict:
     unique_name = f"{uuid.uuid4().hex}{ext}"
 
     # 裁剪为 1:1 正方形（取中心区域）
-    img = Image.open(io.BytesIO(file_bytes))
-    if img.mode == "RGBA":
-        img = img.convert("RGB")
-    width, height = img.size
-    if width != height:
-        side = min(width, height)
-        left = (width - side) // 2
-        top = (height - side) // 2
-        img = img.crop((left, top, left + side, top + side))  # NOQA
-    buf = io.BytesIO()
-    img.save(buf, format=img.format or "JPEG")
-    file_bytes = buf.getvalue()
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        width, height = img.size
+        if width != height:
+            side = min(width, height)
+            left = (width - side) // 2
+            top = (height - side) // 2
+            img = img.crop((left, top, left + side, top + side))  # NOQA
+        buf = io.BytesIO()
+        img.save(buf, format=img.format or "JPEG")
+        file_bytes = buf.getvalue()
+    except Exception:
+        pass  # 非图片直接原样保存
 
     # 保存文件到 avatars 目录
     file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
-    # 返回元数据（不包含文件内容，只存路径）
+    # 返回元数据（不包含文件内容，只存相对文件名）
     return {
         "original_name": uploaded_file.name,  # 原始文件名
         "saved_name": unique_name,  # 存储在磁盘的文件名
         "type": uploaded_file.type,  # MIME 类型（如 image/png）
-        "size": uploaded_file.size,  # 文件大小（字节）
-        "path": file_path,  # 相对路径（用于读取时拼接）
+        "size": len(file_bytes),  # 文件大小（字节）
+        "path": unique_name,  # 相对文件名（用于读取时拼接）
     }
+
+
+def get_avatar_bytes(avatar_name: str) -> bytes:
+    """按名称读取头像二进制，兼容旧数据中保存的绝对路径。"""
+    if not avatar_name:
+        avatar_name = "default_avatar.jpeg"
+    if os.path.isabs(avatar_name):
+        path = avatar_name
+    elif avatar_name == "default_avatar.jpeg":
+        path = os.path.join(DIR, avatar_name)
+    else:
+        # 防目录穿越：只取文件名部分
+        path = os.path.join(AVATARS_DIR, os.path.basename(avatar_name))
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        return b""
 
 
 # endregion
@@ -636,6 +823,7 @@ def save_avatar(uploaded_file) -> dict:
 
 # region 数据导出
 def export_users_csv() -> bytes:
+    """导出全部用户为 CSV（utf-8-sig，Excel 可直接打开）。"""
     import csv
     import io
 
@@ -650,6 +838,7 @@ def export_users_csv() -> bytes:
 
 
 def export_users_json() -> bytes:
+    """导出全部用户为 JSON。"""
     import json
 
     data = list(_User.select().dicts())
@@ -659,6 +848,7 @@ def export_users_json() -> bytes:
 
 
 def export_posts_csv() -> bytes:
+    """导出全部文章为 CSV（含标签、附件数、评论数统计列）。"""
     import csv
     import io
 
@@ -693,6 +883,7 @@ def export_posts_csv() -> bytes:
 
 
 def export_posts_json() -> bytes:
+    """导出全部文章为 JSON。"""
     import json
 
     data = list(_Post.select().dicts())
@@ -702,6 +893,7 @@ def export_posts_json() -> bytes:
 
 
 def export_comments_csv() -> bytes:
+    """导出全部评论为 CSV。"""
     import csv
     import io
 
@@ -716,6 +908,7 @@ def export_comments_csv() -> bytes:
 
 
 def export_comments_json() -> bytes:
+    """导出全部评论为 JSON。"""
     import json
 
     data = list(_Comment.select().dicts())
@@ -775,9 +968,10 @@ def delete_orphaned_attachments() -> int:
 
 def get_comment_summary() -> list[dict]:
     """获取所有评论的摘要（含所属文章）"""
+    posts = {p.id: p for p in _Post.select()}
     result = []
     for comment in _Comment.select().dicts():
-        post = _Post.get_or_none(_Post.id == comment["postid"])
+        post = posts.get(comment["postid"])
         post_comments = post.comments if post else []
         try:
             comment_index = post_comments.index(comment["id"])
@@ -827,11 +1021,12 @@ def search_comments(keyword: str) -> list[dict]:
 
 def get_orphaned_comments() -> list[dict]:
     """找出所属文章已被删除的孤立评论"""
-    result = []
-    for comment in _Comment.select().dicts():
-        if not _Post.get_or_none(_Post.id == comment["postid"]):
-            result.append(comment)
-    return result
+    existing_ids = {p.id for p in _Post.select(_Post.id)}
+    return [
+        c
+        for c in _Comment.select().dicts()
+        if c["postid"] not in existing_ids
+    ]
 
 
 def delete_orphaned_comments() -> int:
