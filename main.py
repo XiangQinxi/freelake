@@ -105,4 +105,4 @@ nav = st.navigation(
 nav.run()
 
 with st.bottom:
-    st.caption("© 2026 XiangQinxi · All rights reserved")
+    st.caption("© 2026 XiangQinxi · FreeLake 自由论坛")

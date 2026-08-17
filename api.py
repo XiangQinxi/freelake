@@ -640,7 +640,8 @@ class Attachment:
             img = Image.open(io.BytesIO(file_bytes))
         except Exception:
             return file_bytes
-        if img.mode == "RGBA":
+        if img.mode not in ("RGB", "L", "CMYK"):
+            # JPEG 不支持 P（调色板）/ RGBA / LA / I / F / 1 等模式，统一转 RGB
             img = img.convert("RGB")
         if img.width > max_width:
             ratio = max_width / img.width

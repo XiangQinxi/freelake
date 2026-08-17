@@ -46,9 +46,9 @@ from api import (
     sha256,
 )
 
-st.page_link("pages/home.py", label="返回主页")
+st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 
-st.subheader("管理员页面")
+st.subheader(":material/security: 管理后台")
 state = st.session_state
 
 # region 统计概览
@@ -79,8 +79,10 @@ with st.expander("用户管理", expanded=True):
 
     with st.container(border=True):
         col_a, col_b = st.columns(2, vertical_alignment="bottom")
-        search_uid = col_a.text_input("搜索用户 ID", placeholder="输入 userid 查询")
-        if search_uid and col_b.button("查询"):
+        search_uid = col_a.text_input(
+            "搜索用户", placeholder="输入用户 ID 查询", key="search_uid_input"
+        )
+        if search_uid and col_b.button("查询", key="search_user_btn"):
             cfg = user.get_config(search_uid)
             if cfg:
                 st.json(cfg)
@@ -111,7 +113,9 @@ with st.expander("用户管理", expanded=True):
 
     with st.container(border=True):
         col_a, col_b = st.columns(2, vertical_alignment="bottom")
-        del_uid = col_a.text_input("输入用户 ID 以删除", key="del_userid")
+        del_uid = col_a.text_input(
+            "输入用户 ID 以删除", key="del_userid", placeholder="输入用户 ID"
+        )
         if col_b.button("删除用户", type="primary", key="del_user_btn"):
             if del_uid:
                 state = st.session_state
@@ -149,7 +153,7 @@ with st.expander("文章管理", expanded=True):
 
     with st.container(border=True):
         col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
-        search_pid = col_a.text_input("按文章 ID 搜索", placeholder="输入 post_id")
+        search_pid = col_a.text_input("按文章 ID 搜索", placeholder="输入文章 ID")
         if col_b.button("搜索", key="search_post_btn"):
             if search_pid:
                 try:
@@ -179,7 +183,7 @@ with st.expander("文章管理", expanded=True):
 
     with st.container(border=True):
         col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
-        del_pid = col_a.text_input("输入文章 ID 以删除", key="del_postid")
+        del_pid = col_a.text_input("按文章 ID 删除", key="del_postid")
         if col_b.button("删除文章", type="primary", key="del_post_btn"):
             if del_pid:
                 st.session_state["del_post_confirm"] = del_pid
@@ -206,8 +210,8 @@ with st.expander("文章管理", expanded=True):
                 st.rerun()
 
     with st.container(border=True):
-        st.caption("评论")
-        st.info("查看下方独立的「评论管理」面板")
+        st.caption("评论管理")
+        st.info("点击展开下方的「评论管理」面板", icon=":material/chat:")
 # endregion
 
 # region 评论管理
@@ -223,7 +227,7 @@ with st.expander("评论管理", expanded=True):
 
         with st.container(border=True):
             col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
-            del_cid = col_a.text_input("按 comment_id 删除", placeholder="输入评论 ID")
+            del_cid = col_a.text_input("按评论 ID 删除", placeholder="输入评论 ID")
             if col_b.button("删除评论", type="primary", key="del_comment_by_id"):
                 if del_cid:
                     st.session_state["del_comment_confirm_id"] = int(del_cid)
@@ -313,7 +317,9 @@ with st.expander("附件管理", expanded=True):
 with st.expander("系统工具", expanded=False):
     st.warning("⚠️ 此处的 SQL 查询将直接作用于数据库，请谨慎操作！")
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-    query = col1.text_input("请输入SQL查询语句", placeholder="例如：SELECT * FROM _user")
+    query = col1.text_input(
+        "SQL 查询语句", placeholder="例如：SELECT * FROM _user"
+    )
     if col2.button("执行查询"):
         if query:
             try:

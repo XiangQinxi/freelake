@@ -8,10 +8,11 @@ FreeLake 用户配置（pages/user_config.py）
 import streamlit as st
 
 from api import User, get_avatar_bytes, save_avatar
+from const import admin
 
-st.page_link("pages/home.py", label="返回主页")
+st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 
-st.subheader("用户信息管理")
+st.subheader(":material/manage_accounts: 用户信息")
 
 user = User()
 userconfig = user.get_config(st.session_state.get("userid"))
@@ -20,13 +21,15 @@ state = st.session_state
 if userconfig:
     with st.container(border=True):
         st.image(get_avatar_bytes(userconfig["avatar"]), width=250)
+        role_name = "管理员" if userconfig.get("role") == admin else "普通用户"
         st.table(
             {
                 ":material/key: 用户ID": userconfig.get("userid"),
                 ":material/person: 名称": userconfig.get("username"),
                 ":material/access_time: 注册时间": userconfig.get("created_at"),
-                ":material/info: 自我介绍": userconfig.get("description"),
-                ":material/info: 职位": userconfig.get("role"),
+                ":material/info: 自我介绍": userconfig.get("description")
+                or "暂无自我介绍",
+                ":material/shield: 职位": role_name,
             },
             border="horizontal",
             width="content",
@@ -34,7 +37,7 @@ if userconfig:
 
     with st.container(border=True):
 
-        @st.dialog("修改用户信息")
+        @st.dialog("编辑资料")
         def modify_config():
             new_avatar = st.file_uploader(
                 "上传新头像", type="image/*", label_visibility="collapsed"
@@ -42,18 +45,18 @@ if userconfig:
             if new_avatar:
                 st.image(new_avatar, width=250)
             new_username = st.text_input(
-                "名称",
-                placeholder="请输入用户名称！",
+                "用户名",
+                placeholder="请输入用户名",
                 value=userconfig.get("username"),  # NOQA
             )
             new_description = st.text_area(
                 "自我介绍",
-                placeholder="请输入自我介绍！",
+                placeholder="请输入自我介绍",
                 value=userconfig.get("description"),  # NOQA
             )
-            if st.button("提交"):
+            if st.button("保存修改"):
                 if not new_username or not new_description:
-                    st.error("请输入名称和自我介绍！")
+                    st.error("请输入用户名和自我介绍！")
                 else:
                     if new_avatar:
                         meta = save_avatar(new_avatar)
@@ -69,11 +72,15 @@ if userconfig:
                     st.toast("用户信息修改成功！")
                     st.rerun()
 
-        if st.button("修改用户信息"):
+        if st.button(":material/edit: 编辑资料"):
             modify_config()
-        with st.popover("修改密码", type="secondary"):
-            original_password = st.text_input("请输入原密码", type="password")
-            new_password = st.text_input("请输入新密码", type="password")
+        with st.popover(":material/password: 修改密码", type="secondary"):
+            original_password = st.text_input(
+                "原密码", placeholder="请输入原密码", type="password"
+            )
+            new_password = st.text_input(
+                "新密码", placeholder="请输入新密码", type="password"
+            )
             if st.button("提交"):
                 if not original_password or not new_password:
                     st.error("请输入原密码和新密码！")
@@ -88,7 +95,7 @@ if userconfig:
                     state["cookies"]["password"] = new_password
                     st.toast("密码修改成功！")
                     st.rerun()
-        if st.button("退出登录", type="primary"):
+        if st.button(":material/logout: 退出登录", type="primary"):
             st.switch_page("logout.py")
 else:
     st.error("用户信息加载失败，请重新登录！")

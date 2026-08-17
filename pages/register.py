@@ -9,7 +9,8 @@ import streamlit as st
 
 from api import User
 
-st.subheader("注册")
+st.subheader(":material/person_add: 注册")
+st.caption("创建账号，加入 FreeLake 自由论坛。")
 
 state = st.session_state
 cookies = state["cookies"]
@@ -19,7 +20,7 @@ with st.form("Register"):
     userid = st.text_input("用户ID")
     username = st.text_input("用户名")
     password = st.text_input("密码", type="password")
-    password2 = st.text_input("请重新输入密码", type="password")
+    password2 = st.text_input("确认密码", type="password")
 
     allowed = True
 
@@ -32,14 +33,9 @@ with st.form("Register"):
             allowed = False
             st.error("密码必须包含字母和数字的组合！")
 
-    st.markdown(
-        """
-    - 密码长度至少8位
-    - 必须包含字母和数字的组合
-    """
-    )
+    st.caption("密码要求：至少 8 位，且同时包含字母和数字。")
 
-    if st.form_submit_button("确认"):
+    if st.form_submit_button(":material/person_add: 注册", type="primary"):
         if not userid:
             st.error("用户ID不能为空")
         elif not username:

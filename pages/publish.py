@@ -10,24 +10,32 @@ import streamlit as st
 from api import Attachment, Post
 from const import tags
 
-st.page_link("pages/home.py", label="返回主页")
-st.subheader("发布文章")
+st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
+st.subheader(":material/edit_note: 发布文章")
+st.caption("分享你的想法——标题与内容为必填，附件与专属密码可选。")
 with st.form(key="publish"):
     new_title = st.text_input(
         "新文章标题", placeholder="请输入标题", label_visibility="collapsed"
     )
     new_content = st.text_area(
-        "新文章内容", placeholder="请输入内容", label_visibility="collapsed"
+        "新文章内容",
+        placeholder="请输入内容，支持 Markdown 排版",
+        label_visibility="collapsed",
     )
     selected_tags = st.multiselect(
-        "标签", tags, default=[tags[0]], accept_new_options=False
+        "选择标签", tags, default=[tags[0]], accept_new_options=False
     )
     uploaded_files = st.file_uploader(
-        "附件（支持图片、文档等各种文件）",
+        "上传附件（可选）",
+        help="支持图片、文档等任意文件，可一次选择多个",
         accept_multiple_files=True,
     )
-    attpassword = st.text_input("附件专属密码", type="password")
-    if st.form_submit_button("发布"):
+    attpassword = st.text_input(
+        "附件专属密码（可选）",
+        help="设置后，访问者需输入密码才能查看附件；留空表示公开",
+        type="password",
+    )
+    if st.form_submit_button(":material/send: 发布文章", type="primary"):
         userid = st.session_state.get("userid")
         if not userid:
             st.error("请先登录！")

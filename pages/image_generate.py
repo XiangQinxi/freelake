@@ -15,8 +15,9 @@ import urllib.request
 import streamlit as st
 from openai import OpenAI
 
-st.page_link("pages/home.py", label="返回主页")
-st.subheader("图片生成")
+st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
+st.subheader(":material/image: 图片生成")
+st.caption("使用 AI 根据文字描述生成图片，或对上传的图片进行编辑。")
 
 secrets = st.secrets
 
@@ -61,22 +62,26 @@ with st.container(border=True):
         with st.expander("查看图片", expanded=True):
             st.image(uploaded_image, caption=uploaded_image.name, width=300)
 
-    prompt = st.text_area("请输入图片描述", height=100)
+    prompt = st.text_area(
+        "图片描述",
+        placeholder="描述你想要的画面，细节越具体效果越好",
+        height=100,
+    )
 
     quality = st.select_slider(
-        "质量 (quality)",
+        "质量",
         options=["auto", "standard", "low", "medium", "high"],
         value="low",
-        help="low 省 token，测试阶段用 low 即可；high 效果最好但贵",
+        help="对应接口参数 quality：low 最省 token，high 效果最好但更贵",
     )
     output_format = st.selectbox(
-        "输出格式 (output_format)",
+        "输出格式",
         options=["png", "jpeg", "webp"],
         index=0,
-        help="png 支持透明背景，jpeg 体积小",
+        help="对应接口参数 output_format：png 支持透明背景，jpeg 体积更小",
     )
     size: str = st.selectbox(
-        "图片尺寸 (size)",
+        "图片尺寸",
         options=[
             "1024x1024",
             "1536x1024",
@@ -88,13 +93,20 @@ with st.container(border=True):
             "auto",
         ],
         index=0,
+        help="对应接口参数 size；auto 由服务端自动决定",
     )
 
-    number: int = st.number_input("生成数量", min_value=1, max_value=10, value=1)
+    number: int = st.number_input(
+        "生成数量", min_value=1, max_value=10, value=1, help="单次最多生成 10 张"
+    )
 
     @st.fragment
     def generation_ui(prompt, quality, output_format, size, number, uploaded_image):
-        if st.button("生成图片", disabled=st.session_state.generating):
+        if st.button(
+            ":material/image: 生成图片",
+            disabled=st.session_state.generating,
+            type="primary",
+        ):
             if not prompt:
                 st.warning("请输入图片描述")
             else:
@@ -105,7 +117,8 @@ with st.container(border=True):
                         base_url=secrets["ai"]["base_url"],
                     )
                     st.info(
-                        "💡 提示：如需渲染特定文字，建议用引号括起来，如「深夜食堂」"
+                        "提示：如需渲染特定文字，建议用引号括起来，如「深夜食堂」",
+                        icon=":material/lightbulb:",
                     )
                     if not uploaded_image:
                         with st.spinner("🎨 正在生成图片，请稍候..."):
@@ -146,17 +159,17 @@ with st.container(border=True):
                                 "ext": output_format or "png",
                             }
                         )
-                    st.success("✅ 生成成功！")
+                    st.success("生成成功", icon=":material/check_circle:")
 
                 except Exception as e:
-                    st.error(f"❌ 生成失败：{str(e)}")
+                    st.error(f"生成失败：{e}", icon=":material/error:")
                 finally:
                     st.session_state.generating = False
 
         for idx, item in enumerate(st.session_state.image_results):
             st.image(item["img_bytes"], width="stretch")
             st.download_button(
-                label=f"💾 下载图片 {idx + 1} (.{item['ext']})",
+                label=f":material/download: 下载图片 {idx + 1}",
                 data=item["img_bytes"],
                 file_name=f"generated_image_{idx + 1}.{item['ext']}",
                 mime=f"image/{item['ext']}",

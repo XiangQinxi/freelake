@@ -11,7 +11,8 @@ import streamlit as st
 
 from api import User
 
-st.subheader("登录")
+st.subheader(":material/login: 登录")
+st.caption("使用用户 ID 与密码登录，即可发布文章、参与评论。")
 
 state = st.session_state
 cookies = state["cookies"]
@@ -21,7 +22,7 @@ with st.form("Login"):
     userid = st.text_input("用户ID")
     password = st.text_input("密码", type="password")
 
-    if st.form_submit_button("确认"):
+    if st.form_submit_button(":material/login: 登录", type="primary"):
         if not userid:
             st.error("用户ID不能为空")
         elif not password:
