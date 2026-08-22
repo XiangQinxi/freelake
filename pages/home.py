@@ -143,21 +143,47 @@ def basic_information(post, _config=None, compact=False):
     )
     col_2.subheader(post["title"])
     if check_by_state():
-        if (
-            post["authorid"] == state["userid"] or userconfig["role"] == admin
-        ):  # 只有作者或管理员才能操作
-            action = col_3.menu_button(
-                "",
-                options=[":material/edit: 编辑", ":material/delete: 删除"],
-                icon=":material/more_vert:",
-                key=f"{post['id']}.menu",
-                type="tertiary",
-            )
-            match action:
-                case ":material/edit: 编辑":
-                    edit_post(post)
-                case ":material/delete: 删除":
-                    confirm_delete_post(post["id"])
+        # 更多菜单：作者/管理员可编辑、删除；所有登录用户可点赞、收藏
+        menu_options = []
+        if post["authorid"] == state["userid"] or userconfig["role"] == admin:
+            menu_options.append(":material/edit: 编辑")
+            menu_options.append(":material/delete: 删除")
+        liked = Like.is_liked(post["id"], state["userid"])
+        bookmarked = Bookmark.is_bookmarked(post["id"], state["userid"])
+        menu_options.append(
+            ":material/favorite: 取消点赞"
+            if liked
+            else ":material/favorite_border: 点赞"
+        )
+        menu_options.append(
+            ":material/bookmark: 取消收藏"
+            if bookmarked
+            else ":material/bookmark_border: 收藏"
+        )
+        action = col_3.menu_button(
+            "",
+            options=menu_options,
+            icon=":material/more_vert:",
+            key=f"{post['id']}.menu",
+            type="tertiary",
+        )
+        match action:
+            case ":material/edit: 编辑":
+                edit_post(post)
+            case ":material/delete: 删除":
+                confirm_delete_post(post["id"])
+            case (
+                ":material/favorite: 取消点赞"
+                | ":material/favorite_border: 点赞"
+            ):
+                Like.toggle(post["id"], state["userid"])
+                st.rerun()
+            case (
+                ":material/bookmark: 取消收藏"
+                | ":material/bookmark_border: 收藏"
+            ):
+                Bookmark.toggle(post["id"], state["userid"])
+                st.rerun()
     if post["tags"]:
         if compact:
             st.markdown(" ".join(f":blue-badge[{tag}]" for tag in post["tags"]))
@@ -216,7 +242,7 @@ def preview(att, container, saved_name, attpassword="", auto_preview=True):
 
 
 def like_and_bookmarked(post):
-    """点赞与收藏按钮组（当前在详情页调用处被注释，保留备用）。"""
+    """详情页点赞与收藏按钮组（未激活 secondary，已激活 primary 更醒目）。"""
     with st.container(horizontal=True):
         liked = (
             Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
@@ -224,7 +250,7 @@ def like_and_bookmarked(post):
         if st.button(
             f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
             key=f"detail_like_{post['id']}",
-            type="tertiary",
+            type="primary" if liked else "secondary",
         ):
             if state.get("userid"):
                 Like.toggle(post["id"], state["userid"])
@@ -237,9 +263,9 @@ def like_and_bookmarked(post):
             else False
         )
         if st.button(
-            ":material/bookmark:" if bookmarked else ":material/bookmark_border:",
+            f"{':material/bookmark:' if bookmarked else ':material/bookmark_border:'} {Bookmark.count(post['id'])}",
             key=f"detail_bm_{post['id']}",
-            type="tertiary",
+            type="primary" if bookmarked else "secondary",
         ):
             if state.get("userid"):
                 Bookmark.toggle(post["id"], state["userid"])
@@ -511,25 +537,25 @@ else:
 
         # region 快捷入口
         if check_by_state():
+            # 全部使用 st.page_link（客户端导航）：与服务端导航（switch_page）
+            # 不同，不会触发 Cookie 组件重载导致卡在「正在加载 Cookies」；
+            # 且链接均指向不同页面，不会出现当前页高亮背景
             with st.container(horizontal=True, border=True):
                 st.page_link(
                     "pages/publish.py",
                     label=":material/edit_note: 发布文章",
                 )
                 st.page_link(
+                    "pages/myposts.py",
+                    label=":material/assignment: 我的发布",
+                )
+                st.page_link(
+                    "pages/bookmarks.py",
+                    label=":material/bookmark: 我的收藏",
+                )
+                st.page_link(
                     "pages/user_config.py",
                     label=":material/settings: 个人设置",
-                )
-                # 全部使用 st.page_link，与其余入口保持一致的对齐与造型
-                st.page_link(
-                    "pages/home.py",
-                    label=":material/bookmark: 我的收藏",
-                    query_params={"bookmarked": "1"},
-                )
-                st.page_link(
-                    "pages/home.py",
-                    label=":material/assignment: 我的发布",
-                    query_params={"user_id": state["userid"]},
                 )
                 current_cfg = user.get_config(state["userid"]) or {}
                 if current_cfg.get("role") == admin:

@@ -48,6 +48,10 @@ AVATARS_DIR = os.path.join(DIR, "avatars")  # NOQA
 os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 os.makedirs(AVATARS_DIR, exist_ok=True)
 
+# 头像压缩参数：边长上限与 JPEG 质量（上传的原始高清图会被缩放重编码）
+MAX_AVATAR_DIM = 512
+AVATAR_QUALITY = 85
+
 
 def format_size(size_bytes: int) -> str:
     """将字节数转换为人类可读的文件大小格式"""
@@ -785,6 +789,11 @@ class Bookmark:
         )
 
     @staticmethod
+    def count(postid: int) -> int:
+        """文章的收藏总数。"""
+        return _Bookmark.select().where(_Bookmark.postid == postid).count()
+
+    @staticmethod
     def get_bookmarked_post_ids(userid: str) -> list[int]:
         """获取用户收藏的所有文章 ID。"""
         return [b.postid for b in _Bookmark.select().where(_Bookmark.userid == userid)]
@@ -803,26 +812,37 @@ def save_avatar(uploaded_file) -> dict:
     # 读取文件二进制数据
     file_bytes = uploaded_file.getvalue()
 
-    # 生成唯一文件名（保留原始扩展名）
-    ext = os.path.splitext(uploaded_file.name)[1]
-    unique_name = f"{uuid.uuid4().hex}{ext}"
-
-    # 裁剪为 1:1 正方形（取中心区域）
+    # 裁剪为 1:1 正方形（取中心区域）并压缩：
+    # - 超过 MAX_AVATAR_DIM 的边长缩小到上限（高清头像大幅减体积）
+    # - 统一转为 RGB JPEG（q=AVATAR_QUALITY），透明背景以白色填充
     try:
         img = Image.open(io.BytesIO(file_bytes))
-        if img.mode == "RGBA":
-            img = img.convert("RGB")
         width, height = img.size
         if width != height:
             side = min(width, height)
             left = (width - side) // 2
             top = (height - side) // 2
             img = img.crop((left, top, left + side, top + side))  # NOQA
+        if img.width > MAX_AVATAR_DIM:
+            img = img.resize(
+                (MAX_AVATAR_DIM, MAX_AVATAR_DIM), Image.LANCZOS
+            )  # NOQA
+        if img.mode in ("RGBA", "LA", "PA", "P"):
+            # 有透明通道时平铺到白色底再转 RGB，避免 JPEG 出现黑底
+            rgba = img.convert("RGBA")
+            background = Image.new("RGB", rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        else:
+            img = img.convert("RGB")
         buf = io.BytesIO()
-        img.save(buf, format=img.format or "JPEG")
+        img.save(buf, format="JPEG", quality=AVATAR_QUALITY)
         file_bytes = buf.getvalue()
     except Exception:
         pass  # 非图片直接原样保存
+
+    # 生成唯一文件名（压缩后统一为 .jpg，与存储内容一致）
+    unique_name = f"{uuid.uuid4().hex}.jpg"
 
     # 保存文件到 avatars 目录
     file_path = os.path.join(AVATARS_DIR, unique_name)  # NOQA
@@ -833,7 +853,7 @@ def save_avatar(uploaded_file) -> dict:
     return {
         "original_name": uploaded_file.name,  # 原始文件名
         "saved_name": unique_name,  # 存储在磁盘的文件名
-        "type": uploaded_file.type,  # MIME 类型（如 image/png）
+        "type": "image/jpeg",  # 压缩后统一为 JPEG
         "size": len(file_bytes),  # 文件大小（字节）
         "path": unique_name,  # 相对文件名（用于读取时拼接）
     }

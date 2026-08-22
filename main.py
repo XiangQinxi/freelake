@@ -71,6 +71,8 @@ st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="cen
 # ---- 页面注册（st.navigation 多页应用） ----
 home_page = st.Page("pages/home.py", title=":material/home: 首页")
 publish_page = st.Page("pages/publish.py", title=":material/publish: 发布文章")
+myposts_page = st.Page("pages/myposts.py", title=":material/assignment: 我的发布")
+bookmarks_page = st.Page("pages/bookmarks.py", title=":material/bookmark: 我的收藏")
 login_page = st.Page("pages/login.py", title=":material/login: 登录")
 register_page = st.Page("pages/register.py", title=":material/person: 注册")
 logout_page = st.Page("pages/logout.py", title=":material/logout: 退出登录")
@@ -88,8 +90,11 @@ if not check_by_state():
     account_pages.append(login_page)
     account_pages.append(register_page)
 else:
-    # 已登录：发布文章 / 用户配置 / 退出登录；管理员额外获得管理页面与图片生成
+    # 已登录：发布文章 / 我的发布 / 我的收藏 / 用户配置 / 退出登录；
+    # 管理员额外获得管理页面与图片生成
     account_pages.append(publish_page)
+    account_pages.append(myposts_page)
+    account_pages.append(bookmarks_page)
     account_pages.append(userconfig_page)
     userconfig = user.get_config(state["userid"]) or {}
     if userconfig.get("role") == admin:  # NOQA

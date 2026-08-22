@@ -178,7 +178,9 @@ def test_like_and_bookmark_toggle():
     # 收藏
     assert Bookmark.toggle(pid, u["userid"]) is True
     assert Bookmark.is_bookmarked(pid, u["userid"]) is True
+    assert Bookmark.count(pid) == 1
     assert Bookmark.toggle(pid, u["userid"]) is False
+    assert Bookmark.count(pid) == 0
 
 
 def test_views_increment():
@@ -270,6 +272,36 @@ def test_attachment_thumbnail(tmp_dirs):
     thumb = Attachment.get_thumbnail_bytes(meta["saved_name"], max_width=100)
     assert thumb.startswith(b"\xff\xd8")  # JPEG
     assert thumb != buf.getvalue()
+
+
+# ---------- 头像压缩 ----------
+
+
+def test_avatar_compression(tmp_dirs):
+    """高清头像上传后：1:1 裁切、缩小到 512 上限、转 JPEG、体积显著减小。"""
+    from api import MAX_AVATAR_DIM, get_avatar_bytes, save_avatar
+
+    # 生成 2000x3000 的 RGBA 大图（带透明区域），模拟高清 PNG 头像
+    original = Image.new("RGBA", (2000, 3000), (30, 144, 255, 255))
+    for x in range(0, 2000, 10):
+        for y in range(0, 3000, 10):
+            original.putpixel((x, y), (0, 0, 0, 0))
+    buf = io.BytesIO()
+    original.save(buf, "PNG")
+    raw = buf.getvalue()
+
+    meta = save_avatar(FakeUpload("avatar.png", raw, "image/png"))
+    # 压缩后统一为 .jpg，且体积明显小于原始 PNG
+    assert meta["saved_name"].endswith(".jpg")
+    assert meta["type"] == "image/jpeg"
+    assert meta["size"] < len(raw) / 2
+
+    # 读回并校验：JPEG 且边长不超过上限（1:1 裁切后为正方形）
+    data = get_avatar_bytes(meta["saved_name"])
+    assert data.startswith(b"\xff\xd8")
+    img = Image.open(io.BytesIO(data))
+    assert img.width == img.height
+    assert img.width <= MAX_AVATAR_DIM
 
 
 # ---------- 只读 SQL 守卫（S3） ----------
