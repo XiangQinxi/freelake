@@ -69,8 +69,9 @@ state["password"] = cookies.get("password", "")
 st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
 
 # ---- 深色模式下 primary 控件文字改为黑色 ----
-# config.toml 没有控件文字色选项；Streamlit 深色主题默认在 primaryColor（浅蓝 #58A6FF）上
-# 渲染白字，对比度不足。这里仅在深色主题下注入 CSS，把主按钮 / 多选标签的文字改为黑色。
+# config.toml 没有控件文字色选项；深色主题 primaryColor 为白色（#FFFFFF），而 Streamlit
+# 默认在 primaryColor 上渲染白字（白底白字不可见）。这里仅在深色主题下注入 CSS，
+# 把主按钮 / 多选标签的文字改为黑色。
 # 覆盖：st.button、st.download_button（二者内部均渲染 stBaseButton-primary）、
 # st.form_submit_button（stBaseButton-primaryFormSubmit）、st.multiselect 已选标签（data-tag）。
 if st.context.theme.type == "dark":
