@@ -19,6 +19,12 @@ Streamlit 论坛应用的主入口脚本，负责：
 import os
 
 import streamlit as st
+
+# streamlit_cookies_manager 仍在使用已移除的 st.cache：
+# 新版 Streamlit（≥1.49 已删除）下先补一个兼容别名，避免导入即报错
+if not hasattr(st, "cache"):
+    st.cache = st.cache_data
+
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from api import User
