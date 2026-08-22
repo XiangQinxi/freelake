@@ -68,6 +68,47 @@ state["password"] = cookies.get("password", "")
 
 st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
 
+# ---- 深色模式下 primary 控件文字改为黑色 ----
+# config.toml 没有控件文字色选项；Streamlit 深色主题默认在 primaryColor（浅蓝 #58A6FF）上
+# 渲染白字，对比度不足。这里仅在深色主题下注入 CSS，把主按钮 / 多选标签的文字改为黑色。
+# 覆盖：st.button、st.download_button（二者内部均渲染 stBaseButton-primary）、
+# st.form_submit_button（stBaseButton-primaryFormSubmit）、st.multiselect 已选标签（data-tag）。
+if st.context.theme.type == "dark":
+    st.html(
+        """
+        <style>
+        /* 主按钮：st.button / st.download_button */
+        button[data-testid="stBaseButton-primary"],
+        button[kind="primary"] {
+            color: #000000 !important;
+        }
+        button[data-testid="stBaseButton-primary"]:hover,
+        button[data-testid="stBaseButton-primary"]:focus,
+        button[data-testid="stBaseButton-primary"]:active,
+        button[data-testid="stBaseButton-primary"]:disabled,
+        button[kind="primary"]:hover,
+        button[kind="primary"]:focus,
+        button[kind="primary"]:active,
+        button[kind="primary"]:disabled {
+            color: #000000 !important;
+        }
+        /* 表单主提交按钮：st.form_submit_button */
+        button[data-testid="stBaseButton-primaryFormSubmit"],
+        button[data-testid="stBaseButton-primaryFormSubmit"]:hover,
+        button[data-testid="stBaseButton-primaryFormSubmit"]:focus,
+        button[data-testid="stBaseButton-primaryFormSubmit"]:active,
+        button[data-testid="stBaseButton-primaryFormSubmit"]:disabled {
+            color: #000000 !important;
+        }
+        /* 多选下拉已选标签：st.multiselect */
+        .stMultiSelect [data-tag],
+        .stMultiSelect [data-tag]:focus-visible {
+            color: #000000 !important;
+        }
+        </style>
+        """
+    )
+
 # ---- 页面注册（st.navigation 多页应用） ----
 home_page = st.Page("pages/home.py", title=":material/home: 首页")
 publish_page = st.Page("pages/publish.py", title=":material/publish: 发布文章")
