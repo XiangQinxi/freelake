@@ -62,15 +62,18 @@ if userconfig:
                         meta = save_avatar(new_avatar)
                     else:
                         meta = {}
-                    user.modify(
+                    ok = user.modify(
                         state.get("userid"),
                         state.get("password"),
                         username=new_username,
                         description=new_description,
                         avatar=meta.get("path") if new_avatar else None,
                     )
-                    st.toast("用户信息修改成功！")
-                    st.rerun()
+                    if ok:
+                        st.toast("用户信息修改成功！")
+                        st.rerun()
+                    else:
+                        st.error("修改失败：请检查密码或登录状态已过期")
 
         if st.button(":material/edit: 编辑资料"):
             modify_config()
@@ -85,16 +88,19 @@ if userconfig:
                 if not original_password or not new_password:
                     st.error("请输入原密码和新密码！")
                 else:
-                    user.modify(
+                    ok = user.modify(
                         state.get("userid"),
                         password=original_password,
                         new_password=new_password,
                     )
-                    # 同步更新会话与 cookie 中的密码，避免改密后被登出
-                    state["password"] = new_password
-                    state["cookies"]["password"] = new_password
-                    st.toast("密码修改成功！")
-                    st.rerun()
+                    if ok:
+                        # 同步更新会话与 cookie 中的密码，避免改密后被登出
+                        state["password"] = new_password
+                        state["cookies"]["password"] = new_password
+                        st.toast("密码修改成功！")
+                        st.rerun()
+                    else:
+                        st.error("原密码错误，修改失败！")
         if st.button(":material/logout: 退出登录", type="primary"):
             st.switch_page("logout.py")
 else:

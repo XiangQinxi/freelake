@@ -4,6 +4,7 @@
 .idea
 .streamlit/secrets.toml
 __pycache__
+.pytest_cache
 
 attachments/
 avatars/
@@ -13,5 +14,3 @@ data.db
 demo.py
 demo2.py
 demo3.py
-
-tests/

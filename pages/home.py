@@ -99,6 +99,22 @@ def edit_post(post):
                 st.error("文章修改失败！")
 
 
+@st.dialog("编辑评论")
+def edit_comment_dialog(post_id, comment_index, current_content):
+    new_content = st.text_area(
+        "评论内容", value=current_content, label_visibility="collapsed"
+    )
+    if st.button("保存修改", type="primary"):
+        if not new_content.strip():
+            st.error("评论内容不能为空！")
+        else:
+            if Post.edit_comment(int(post_id), comment_index, new_content):
+                st.toast("评论修改成功！")
+                st.rerun()
+            else:
+                st.error("评论修改失败！")
+
+
 # endregion
 
 
@@ -151,13 +167,15 @@ def basic_information(post, _config=None, compact=False):
     if compact:
         st.caption(
             f":material/person: {username} · "
-            f":material/access_time: {post['created_at']}"
+            f":material/access_time: {post['created_at']} · "
+            f":material/visibility: {post.get('views', 0)} 次浏览"
         )
     else:
         st.table(
             {
                 ":material/person: 作者名称": username,  # NOQA
                 ":material/access_time: 发布时间": post["created_at"],
+                ":material/visibility: 浏览量": post.get("views", 0),
                 ":material/info: 文章ID": post["id"],
             },
             border="horizontal",
@@ -255,6 +273,30 @@ if user_id:
             border="horizontal",
             width="content",
         )
+
+        # 该用户发布的文章列表
+        st.divider()
+        st.markdown("### :material/article: 发布的文章")
+        author_posts = Post.get_by_author(user_id)
+        if not author_posts:
+            st.caption("还没有发布过文章。")
+        else:
+            for p in author_posts[:50]:
+                with st.container(border=True):
+                    basic_information(p, userconfig, compact=True)
+                    snippet = (p["content"] or "").strip()
+                    if len(snippet) > 40:
+                        snippet = snippet[:40] + "…"
+                    if snippet:
+                        st.markdown(snippet)
+                    if st.button(
+                        "阅读全文",
+                        icon=":material/arrow_forward:",
+                        key=f"author_view_{p['id']}",
+                    ):
+                        params["post_id"] = str(p["id"])
+                        del params["user_id"]  # 从个人主页进入详情
+                        st.rerun()
     else:
         st.error("该用户不存在！")
 # endregion
@@ -265,6 +307,10 @@ else:
             del st.query_params["post_id"]
             st.rerun()
         try:
+            # 浏览量 +1（每个会话只计一次，避免页面交互 rerun 重复计数）
+            if not state.get(f"viewed_{post_id}"):
+                Post.add_view(int(post_id))
+                state[f"viewed_{post_id}"] = True
             post = Post.get(int(post_id))
         except (TypeError, ValueError):
             post = None
@@ -273,7 +319,7 @@ else:
 
             st.markdown(post["content"])
 
-            # like_and_bookmarked(post)
+            like_and_bookmarked(post)
 
             # 显示附件
             attachments = post.get("attachments", [])
@@ -410,9 +456,13 @@ else:
                 with st.expander(
                     f":material/comment: 评论 ({len(comments)})", expanded=True
                 ):
+                    # 批量查询评论作者配置，避免逐条 N+1
+                    comment_configs = User.get_configs(
+                        json.loads(c)["userid"] for c in comments
+                    )
                     for index, comment in enumerate(comments):
                         comment = json.loads(comment)
-                        cfg = user.get_config(comment["userid"])
+                        cfg = comment_configs.get(comment["userid"])
                         if cfg:
                             col_a, col_b, col_c = st.columns(
                                 [0.08, 0.82, 0.1], vertical_alignment="top"
@@ -442,7 +492,9 @@ else:
                                     )
                                     match action:
                                         case ":material/edit: 编辑":
-                                            pass
+                                            edit_comment_dialog(
+                                                post["id"], index, comment["content"]
+                                            )
                                         case ":material/delete: 删除":
                                             if Post.delete_comment(int(post_id), index):
                                                 st.toast("评论删除成功！")
@@ -467,6 +519,17 @@ else:
                 st.page_link(
                     "pages/user_config.py",
                     label=":material/settings: 个人设置",
+                )
+                # 全部使用 st.page_link，与其余入口保持一致的对齐与造型
+                st.page_link(
+                    "pages/home.py",
+                    label=":material/bookmark: 我的收藏",
+                    query_params={"bookmarked": "1"},
+                )
+                st.page_link(
+                    "pages/home.py",
+                    label=":material/assignment: 我的发布",
+                    query_params={"user_id": state["userid"]},
                 )
                 current_cfg = user.get_config(state["userid"]) or {}
                 if current_cfg.get("role") == admin:
@@ -499,22 +562,35 @@ else:
 
             selected_tag = st.pills(":material/filter_alt: 筛选", tags)
 
+            # 「仅显示已收藏」支持 ?bookmarked=1 直达（我的收藏入口）
+            bookmarked_param = params.get("bookmarked") == "1"
             show_bookmarked = (
                 st.checkbox(
                     ":material/bookmark: 仅显示已收藏",
-                    value=False,
+                    value=bookmarked_param if check_by_state() else False,
                     disabled=not check_by_state(),
                 )
                 if check_by_state()
                 else False
             )
+            if check_by_state() and show_bookmarked != bookmarked_param:
+                if show_bookmarked:
+                    params["bookmarked"] = "1"
+                else:
+                    if "bookmarked" in params:
+                        del params["bookmarked"]
+                st.rerun()
         # endregion
 
         # region 分页
-        if search_keyword:
-            total = Post.search_count(search_keyword)
-        else:
-            total = Post.count()
+        bookmarked_ids = None
+        if show_bookmarked and state.get("userid"):
+            bookmarked_ids = Bookmark.get_bookmarked_post_ids(state["userid"])
+
+        # 关键词 / 标签 / 收藏统一在 SQL 层过滤，总数与列表口径一致
+        total = Post.count_filtered(
+            keyword=search_keyword or "", tag=selected_tag, post_ids=bookmarked_ids
+        )
 
         with st.bottom:
             page = pagination(
@@ -528,17 +604,13 @@ else:
         if total == 0:
             st.info("没有找到相关文章。", icon=":material/search_off:")
         else:
-            if search_keyword:
-                posts = Post.search_with_paginate(search_keyword, page, 5)
-            else:
-                posts = Post.get_with_paginate(page, 5)
-
-            # 先在内存中完成标签 / 收藏筛选，避免多余的查询
-            if selected_tag:
-                posts = [p for p in posts if selected_tag in (p.get("tags") or [])]
-            if show_bookmarked and state.get("userid"):
-                bookmarked_ids = set(Bookmark.get_bookmarked_post_ids(state["userid"]))
-                posts = [p for p in posts if p["id"] in bookmarked_ids]
+            posts = Post.get_filtered_paginate(
+                keyword=search_keyword or "",
+                tag=selected_tag,
+                post_ids=bookmarked_ids,
+                page=page,
+                page_size=5,
+            )
 
             if not posts:
                 st.info("没有找到相关文章。", icon=":material/search_off:")

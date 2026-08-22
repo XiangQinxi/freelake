@@ -9,9 +9,9 @@
 ## 功能特性
 
 - **用户体系**：注册 / 登录 / 退出、个人资料（昵称、自我介绍、头像）、密码修改
-- **文章**：发布、编辑、删除、搜索、标签筛选、分页浏览、查看个人主页
-- **评论**：文章评论区（最新一条评论展示在首页列表）
-- **互动**：点赞、收藏（仅显示已收藏）
+- **文章**：发布、编辑、删除、搜索、标签筛选、分页浏览、查看个人主页、浏览量统计
+- **评论**：文章评论区（最新一条评论展示在首页列表）、评论编辑/删除
+- **互动**：点赞、收藏、「我的收藏 / 我的发布」快捷入口
 - **附件**：多文件上传、图片在线预览（缩略图缓存）、音频/视频预览、ZIP 打包下载、附件专属密码保护
 - **管理后台**（管理员专属）：用户 / 文章 / 评论 / 附件管理、孤立数据清理、数据导出（CSV/JSON）、文件浏览
 - **AI 图片生成**（管理员专属）：基于 OpenAI 兼容接口的文生图 / 图生图
@@ -115,8 +115,8 @@ freelake/
 | 表 | 字段要点 |
 | --- | --- |
 | `_user` | userid, username, password(哈希), description, avatar, role, secret_key |
-| `_post` | id, authorid, title, content, created_at, attachments(JSON), attpassword, tags(JSON), comments(JSON) |
-| `_comment` | id, postid, userid, content, created_at |
+| `_post` | id(自增), authorid, title, content, created_at, attachments(JSON), attpassword, tags(JSON), comments(JSON), views |
+| `_comment` | id(自增), postid, userid, content, created_at |
 | `_like` / `_bookmark` | postid, userid |
 
 ## 安全说明

@@ -62,8 +62,19 @@ def format_size(size_bytes: int) -> str:
 
 
 def execute_sql(query: str) -> list[dict[str, str]]:
-    """执行SQL查询"""
-    return list(db.execute(query).dicts())
+    """执行只读 SQL 查询（仅允许 SELECT / WITH / EXPLAIN / PRAGMA）。
+
+    管理后台的 SQL 工具只应进行查询，禁止 DELETE / UPDATE / DROP 等
+    写操作，防止误操作破坏数据。
+    """
+    stripped = (query or "").lstrip().rstrip(";").strip()
+    head = stripped.split(None, 1)[0].upper() if stripped else ""
+    if head not in ("SELECT", "WITH", "EXPLAIN", "PRAGMA"):
+        raise ValueError("仅允许只读查询：SELECT / WITH / EXPLAIN / PRAGMA")
+    # 注意：必须用 execute_sql（原生 SQL）；db.execute 会把字符串当作参数绑定
+    cursor = db.execute_sql(stripped)
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 def generate_sk_key(byte_length=40):
@@ -103,7 +114,7 @@ class _User(BaseModel):
 class _Post(BaseModel):
     """用于存储文章的表"""
 
-    id = IntegerField()
+    id = AutoField()  # 数据库自增主键（不再手工分配）
     authorid = CharField()
     title = TextField()
     content = TextField()
@@ -112,18 +123,17 @@ class _Post(BaseModel):
     attpassword = CharField(max_length=256, default="")
     tags = JSONField(default=list)
     comments = JSONField(default=list)
+    views = IntegerField(default=0)  # 浏览量统计
 
 
 class _Comment(BaseModel):
     """用于存储评论的表"""
 
-    id = IntegerField()
+    id = AutoField()  # 数据库自增主键（不再手工分配）
     postid = IntegerField()
     userid = CharField()
     content = TextField()
     created_at = CharField()
-    attachments = JSONField(default=list)
-    attpassword = CharField(max_length=256, default="")
 
 
 class _Like(BaseModel):
@@ -416,15 +426,11 @@ class Post:
     ) -> int:
         """发布文章"""
         print(f"{authorid}发布了新文章：{title}")
-        _id = (
-            _Post.select(fn.MAX(_Post.id) + 1).scalar() or 1
-        )  # 获取当前最大 ID 并加 1，初始为 1
         if attpassword:
             attpassword = sha256(attpassword)
         else:
             attpassword = ""
-        _Post.create(
-            id=_id,
+        post = _Post.create(
             authorid=authorid,
             title=title,
             created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -433,7 +439,7 @@ class Post:
             attpassword=attpassword,
             tags=tags or [],
         )
-        return _id
+        return post.id
 
     @staticmethod
     def delete(postid: int) -> bool:
@@ -463,33 +469,66 @@ class Post:
         return list(_Post.select().dicts())
 
     @staticmethod
-    def search_with_paginate(
-        keyword: str, page: int, page_size: int
+    def _apply_filters(
+        query,
+        keyword: str = "",
+        tag: str | None = None,
+        post_ids: typing.Iterable[int] | None = None,
+    ):
+        """按关键词 / 标签 / 文章 ID 集合过滤查询（SQL 层，供计数与分页共用）。
+
+        标签使用 JSONField.contains —— SQLite 上为精确的 JSON 数组元素匹配，
+        避免子串误匹配；关键词为标题或内容的模糊搜索。
+        """
+        if keyword:
+            query = query.where(
+                (_Post.title.contains(keyword)) | (_Post.content.contains(keyword))
+            )
+        if tag:
+            query = query.where(_Post.tags.contains(tag))
+        if post_ids is not None:
+            query = query.where(_Post.id.in_(post_ids))
+        return query
+
+    @staticmethod
+    def count_filtered(
+        keyword: str = "",
+        tag: str | None = None,
+        post_ids: typing.Iterable[int] | None = None,
+    ) -> int:
+        """按关键词 / 标签 / 文章 ID 集合统计文章总数（用于分页，与列表口径一致）。"""
+        return Post._apply_filters(_Post.select(), keyword, tag, post_ids).count()
+
+    @staticmethod
+    def get_filtered_paginate(
+        keyword: str = "",
+        tag: str | None = None,
+        post_ids: typing.Iterable[int] | None = None,
+        page: int = 1,
+        page_size: int = 5,
     ) -> list[dict[str, str]]:
-        """按关键词（标题或内容）搜索文章，返回指定页的数据。"""
+        """按关键词 / 标签 / 文章 ID 集合过滤后分页获取文章（发布时间倒序）。"""
         return (
-            _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
+            Post._apply_filters(_Post.select(), keyword, tag, post_ids)
             .order_by(_Post.id.desc())
             .paginate(page, page_size)
             .dicts()
         )
 
     @staticmethod
-    def search_count(keyword: str) -> int:
-        """按关键词统计文章总数（用于分页）。"""
+    def get_by_author(authorid: str) -> list[dict[str, str]]:
+        """获取某用户发布的全部文章（发布时间倒序），用于个人主页。"""
         return (
             _Post.select()
-            .where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
-            .count()
+            .where(_Post.authorid == authorid)
+            .order_by(_Post.id.desc())
+            .dicts()
         )
 
     @staticmethod
-    def get_with_paginate(page: int, page_size: int) -> list[dict[str, str]]:
-        """按发布时间倒序获取指定页的文章（不含评论详情）。"""
-        return (
-            _Post.select().order_by(_Post.id.desc()).paginate(page, page_size).dicts()
-        )
+    def add_view(postid: int) -> None:
+        """文章浏览量 +1。"""
+        _Post.update(views=_Post.views + 1).where(_Post.id == postid).execute()
 
     @staticmethod
     def get(_id: int) -> dict | None:
@@ -560,20 +599,31 @@ class Post:
         content: str,
     ) -> int | None:
         """添加评论，返回评论 ID"""
-        cid = _Comment.select(fn.MAX(_Comment.id) + 1).scalar() or 1
-        _Comment.create(
-            id=cid,
+        comment = _Comment.create(
             postid=postid,
             userid=userid,
             content=content,
-            created_at=datetime.datetime.now().isoformat(),
+            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
+        cid = comment.id
         post = _Post.get_or_none(_Post.id == postid)
         if post:
             post.comments = (post.comments or []) + [cid]
             post.save()
             return cid
         return None
+
+    @staticmethod
+    def edit_comment(postid: int, comment_index: int, content: str) -> bool:
+        """编辑评论（按文章内评论列表的下标定位）。"""
+        post = _Post.get_or_none(_Post.id == postid)
+        if post and 0 <= comment_index < len(post.comments):
+            cid = post.comments[comment_index]
+            updated = (
+                _Comment.update(content=content).where(_Comment.id == cid).execute()
+            )
+            return updated > 0
+        return False
 
     @staticmethod
     def delete_comment(postid: int, comment_index: int) -> bool:
@@ -668,23 +718,16 @@ class Attachment:
         返回:
             bytes: 文件的二进制数据，文件不存在时返回空字节
         """
+        # 防目录穿越：与头像读取一致，只取文件名部分
+        saved_name = os.path.basename(saved_name or "")
         file_path = os.path.join(ATTACHMENTS_DIR, saved_name)  # NOQA
         try:
             with open(file_path, "rb") as f:
                 return f.read()
         except FileNotFoundError:
             return b""
-        except OSError as e:
+        except OSError:
             return b""
-
-    @staticmethod
-    def get_base64(saved_name: str) -> str:
-        """
-        根据保存的文件名读取附件并转为 base64 字符串。
-        用于在页面上展示图片等。
-        """
-        file_bytes = Attachment.get_file(saved_name)
-        return base64.b64encode(file_bytes).decode()
 
 
 class Like:
@@ -713,11 +756,6 @@ class Like:
     def count(postid: int) -> int:
         """文章的点赞总数。"""
         return _Like.select().where(_Like.postid == postid).count()
-
-    @staticmethod
-    def get_liked_user_ids(postid: int) -> list[str]:
-        """获取点赞该文章的所有用户 ID。"""
-        return [like.userid for like in _Like.select().where(_Like.postid == postid)]
 
 
 class Bookmark:

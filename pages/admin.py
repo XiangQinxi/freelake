@@ -23,7 +23,6 @@ from streamlit_file_browser import st_file_browser
 
 from api import (
     ATTACHMENTS_DIR,
-    Attachment,
     Post,
     User,
     delete_comment_by_id,
@@ -315,7 +314,7 @@ with st.expander("附件管理", expanded=True):
 
 # region 系统工具
 with st.expander("系统工具", expanded=False):
-    st.warning("⚠️ 此处的 SQL 查询将直接作用于数据库，请谨慎操作！")
+    st.warning("⚠️ 仅支持只读 SQL 查询（SELECT / WITH / EXPLAIN / PRAGMA），写操作已被拦截！")
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
     query = col1.text_input(
         "SQL 查询语句", placeholder="例如：SELECT * FROM _user"
@@ -337,9 +336,25 @@ with st.expander("系统工具", expanded=False):
             st.code(sha256(original_text))
 
     with st.container(border=True):
+        st.caption("数据库备份")
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.db")
         if os.path.exists(db_path):
-            st.metric("数据库大小", format_size(os.path.getsize(db_path)), border=True)
+            with open(db_path, "rb") as f:
+                db_bytes = f.read()
+            col_a, col_b = st.columns([0.5, 0.5])
+            col_a.metric("数据库大小", format_size(len(db_bytes)), border=True)
+            col_b.download_button(
+                label=":material/save: 下载 data.db 备份",
+                data=db_bytes,
+                file_name="freelake_backup.db",
+                mime="application/octet-stream",
+                type="primary",
+                width="stretch",
+            )
+            st.caption(
+                "恢复方法：先停止应用，再用备份文件覆盖项目根目录的 data.db "
+                "（覆盖前请先备份当前文件）。Streamlit Cloud 上文件系统不持久，请自行保管备份。"
+            )
 # endregion
 
 # region 数据导出
