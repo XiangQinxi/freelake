@@ -708,7 +708,7 @@ else:
         render_video_background(
             Path(__file__).resolve().parent.parent / "static" / "bg_embed.mp4",
             embed=True,
-            blur="4px",
+            blur="6px",
             opacity=0.4,
             backdrop_light="#FFFFFF",
             backdrop_dark="#0E0E0E",
