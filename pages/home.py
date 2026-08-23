@@ -18,6 +18,7 @@ import datetime
 import io
 import json
 import re
+from pathlib import Path
 from zipfile import ZipFile
 
 import streamlit as st
@@ -705,9 +706,10 @@ else:
     # region 主页显示
     else:
         render_video_background(
-            "/app/static/background_720p.mp4",
-            blur="5px",
-            opacity=0.3,
+            Path(__file__).resolve().parent.parent / "static" / "bg_embed.mp4",
+            embed=True,
+            blur="4px",
+            opacity=0.4,
             backdrop_light="#FFFFFF",
             backdrop_dark="#0E0E0E",
         )
