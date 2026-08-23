@@ -40,6 +40,8 @@ def _secrets_get(key, default=None):
         return default
 
 
+st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
+
 # ---- 会话状态初始化 ----
 state = st.session_state
 
@@ -57,16 +59,16 @@ cookies = EncryptedCookieManager(
 )
 state["cookies"] = cookies
 
-# Cookie 组件首轮渲染需要浏览器回传，未就绪时先提示并停止本次执行
-if not cookies.ready():
+# Cookie 组件首轮渲染需要浏览器回传。注意：未就绪时**不要** st.stop()——
+# 服务端导航（如发布后的 st.switch_page）会让 Cookie 组件重载；若在此处停止
+# 执行，页面会死锁在「正在加载 Cookies」且需手动刷新。改为未就绪时先按当前
+# 会话状态继续渲染（顶部提示加载中），组件值回传后的下一次 rerun 自动纠正登录态。
+if cookies.ready():
+    # 从 Cookie 恢复登录状态（未登录时为空字符串）
+    state["userid"] = cookies.get("userid", "")
+    state["password"] = cookies.get("password", "")
+else:
     st.info("⏳ 正在加载 Cookies，请稍候...")
-    st.stop()
-
-# 从 Cookie 恢复登录状态（未登录时为空字符串）
-state["userid"] = cookies.get("userid", "")
-state["password"] = cookies.get("password", "")
-
-st.set_page_config("FreeLake · 自由论坛", page_icon="logo.ico", layout="centered")
 
 # ---- 深色模式下 primary 控件文字改为黑色 ----
 # config.toml 没有控件文字色选项；深色主题 primaryColor 为白色（#FFFFFF），而 Streamlit
