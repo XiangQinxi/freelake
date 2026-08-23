@@ -24,7 +24,7 @@ import streamlit as st
 from streamlit_video_background import render_video_background
 
 from api import (Attachment, Bookmark, Like, Post, Report, User, format_size,
-                 get_avatar_bytes, sha256)
+                 get_avatar_bytes, save_avatar, sha256)
 from api2 import check_by_state
 from const import admin, tags
 
@@ -114,7 +114,10 @@ def edit_post(post):
         label_visibility="collapsed",
     )
     new_tags = st.multiselect(
-        "标签", tags, default=post["tags"], accept_new_options=False
+        "标签",
+        tags,
+        default=[t for t in (post["tags"] or []) if t in tags],
+        accept_new_options=False,
     )
     if st.button("提交修改"):
         if not new_title:
@@ -190,6 +193,42 @@ def report_comment_dialog(post_id, comment):
                 st.rerun()
             else:
                 st.warning("你已举报过该评论，管理员正在处理中")
+
+
+@st.dialog("编辑资料")
+def edit_profile_dialog(userconfig):
+    new_avatar = st.file_uploader(
+        "上传新头像", type="image/*", label_visibility="collapsed"
+    )
+    if new_avatar:
+        st.image(new_avatar, width=250)
+    new_username = st.text_input(
+        "用户名",
+        placeholder="请输入用户名",
+        value=userconfig.get("username"),  # NOQA
+    )
+    new_description = st.text_area(
+        "自我介绍",
+        placeholder="请输入自我介绍",
+        value=userconfig.get("description"),  # NOQA
+    )
+    if st.button("保存修改"):
+        if not new_username or not new_description:
+            st.error("请输入用户名和自我介绍！")
+        else:
+            meta = save_avatar(new_avatar) if new_avatar else {}
+            ok = user.modify(
+                state.get("userid"),
+                state.get("password"),
+                username=new_username,
+                description=new_description,
+                avatar=meta.get("path") if new_avatar else None,
+            )
+            if ok:
+                st.toast("用户信息修改成功！")
+                st.rerun()
+            else:
+                st.error("修改失败：请检查密码或登录状态已过期")
 
 
 # endregion
@@ -379,6 +418,47 @@ if user_id:
         c3.metric("总获赞", stats["likes"], border=True)
         c4.metric("总获藏", stats["bookmarks"], border=True)
         st.divider()
+
+        # 账号设置（仅本人可见；点击头像或个人设置按钮到达本页）
+        is_self = bool(state.get("userid") and state.get("userid") == user_id)
+        if is_self:
+            with st.container(border=True):
+                st.caption(":material/manage_accounts: 账号设置")
+                col_set, col_log = st.columns([0.8, 0.2])
+                if col_set.button(
+                    ":material/edit: 编辑资料", type="primary", width="stretch"
+                ):
+                    edit_profile_dialog(userconfig)
+                with col_set.popover(
+                    ":material/password: 修改密码", type="secondary"
+                ):
+                    original_password = st.text_input(
+                        "原密码", placeholder="请输入原密码", type="password"
+                    )
+                    new_password = st.text_input(
+                        "新密码", placeholder="请输入新密码", type="password"
+                    )
+                    if st.button("提交"):
+                        if not original_password or not new_password:
+                            st.error("请输入原密码和新密码！")
+                        else:
+                            ok = user.modify(
+                                state.get("userid"),
+                                password=original_password,
+                                new_password=new_password,
+                            )
+                            if ok:
+                                state["password"] = new_password
+                                state["cookies"]["password"] = new_password
+                                st.toast("密码修改成功！")
+                                st.rerun()
+                            else:
+                                st.error("原密码错误，修改失败！")
+                if col_log.button(
+                    ":material/logout: 退出登录", type="primary", width="stretch"
+                ):
+                    st.switch_page("pages/logout.py")
+            st.divider()
 
         # 该用户发布的文章列表
         st.markdown("### :material/article: 发布的文章")
@@ -639,16 +719,13 @@ else:
                     label=":material/edit_note: 发布文章",
                 )
                 st.page_link(
-                    "pages/myposts.py",
-                    label=":material/assignment: 我的发布",
-                )
-                st.page_link(
                     "pages/bookmarks.py",
                     label=":material/bookmark: 我的收藏",
                 )
                 st.page_link(
-                    "pages/user_config.py",
+                    "pages/home.py",
                     label=":material/settings: 个人设置",
+                    query_params={"user_id": state.get("userid", "")},
                 )
                 current_cfg = user.get_config(state["userid"]) or {}
                 if current_cfg.get("role") == admin:
