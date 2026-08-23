@@ -16,6 +16,7 @@ import base64
 import datetime
 import io
 import json
+from pathlib import Path
 from zipfile import ZipFile
 
 import streamlit as st
@@ -43,6 +44,70 @@ SORT_KEYS = {
 }
 DEFAULT_SORT = "按日期排序"
 DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
+
+# ---- 主页动态视频背景 ----
+# 视频由 server.enableStaticServing 映射到 /app/static/ 下（见 .streamlit/config.toml）。
+# 52MB 视频直接以 base64 内嵌会让页面体积膨胀到 ~70MB，因此走静态文件服务更合适；
+# 视频已用 FFmpeg 压缩为 1280x720/H.264，体积大幅减小。
+VIDEO_BG_URL = "/app/static/background_720p.mp4"
+VIDEO_BG_FILE = (
+    Path(__file__).resolve().parent.parent / "static" / "background_720p.mp4"
+)
+# 视频自身的视觉效果（按需调整）：模糊 8px + 50% 透明度
+VIDEO_BG_BLUR = "8px"
+VIDEO_BG_OPACITY = 0.5
+# 视频半透明时透出的页面底色（浅/深主题分别取 config.toml 的 backgroundColor）
+VIDEO_BG_BACKDROP_LIGHT = "#FFFFFF"
+VIDEO_BG_BACKDROP_DARK = "#0E0E0E"
+
+
+def _render_video_background():
+    """渲染全屏动态视频背景（background.mp4）。
+
+    - 视频用 `<video>` 元素固定在最底层（z-index:-1），内容区背景透明化使其透出；
+    - 视频本身按需模糊（blur）并以 50% 透明度叠加，透出随主题变化的页面底色，
+      从而在保证文字可读的同时呈现柔和动态背景；
+    - 文件不存在时静默跳过，不影响其它功能。
+    """
+    if not VIDEO_BG_FILE.exists():
+        return
+    backdrop = (
+        VIDEO_BG_BACKDROP_DARK
+        if st.context.theme.type == "dark"
+        else VIDEO_BG_BACKDROP_LIGHT
+    )
+
+    video_tag = (
+        '<div id="fl-video-bg" style="position:fixed; inset:0; z-index:-1; '
+        'overflow:hidden; pointer-events:none;">'
+        '<video autoplay loop muted playsinline '
+        'style="position:absolute; inset:0; width:100%; height:100%; '
+        'object-fit:cover; '
+        f'filter:blur({VIDEO_BG_BLUR}); opacity:{VIDEO_BG_OPACITY};" '
+        f'src="{VIDEO_BG_URL}"></video>'
+        '</div>'
+    )
+
+    style = f"""
+    <style>
+    /* 半透明视频透出的页面底色，随主题变化 */
+    body {{ background-color: {backdrop} !important; }}
+    /* 让主内容区背景透明，使最底层的视频背景透出 */
+    .stApp,
+    [data-testid="stHeader"],
+    [data-testid="stMain"],
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stBottom"],
+    [data-testid="stBottomBlockContainer"],
+    [data-testid="stSidebar"] {{
+        background-color: transparent !important;
+    }}
+    </style>
+    """
+
+    st.html(video_tag + style)
+
 
 user = User()
 params = st.query_params
@@ -543,6 +608,7 @@ else:
     # endregion
     # region 主页显示
     else:
+        _render_video_background()
         st.markdown("### :material/forum: 欢迎来到 FreeLake")
         st.caption("分享趣事、校园生活与开发心得的自由论坛——写下你的第一篇帖子吧。")
 

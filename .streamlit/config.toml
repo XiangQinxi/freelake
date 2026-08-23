@@ -1,5 +1,6 @@
 [server]
 runOnSave = true
+enableStaticServing = true
 
 [theme]
 base = "light"
