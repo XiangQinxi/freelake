@@ -8,6 +8,7 @@ FreeLake 我的收藏（pages/bookmarks.py）
 说明：本页仅通过 st.page_link 跳转（客户端导航），避免服务端导航
 （st.switch_page）导致 Cookie 组件重载后卡在「正在加载 Cookies」。
 """
+
 import streamlit as st
 
 from api import Bookmark, Post, User

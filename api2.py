@@ -11,6 +11,7 @@ FreeLake 会话辅助层（api2.py）
 - ``check_by_state`` 直接查库校验（每次调用一次索引查询），不要在此做
   会话内记忆化缓存——曾有记忆化把正确凭据缓存为 False 导致登录失败的教训。
 """
+
 import streamlit as st
 
 from api import User

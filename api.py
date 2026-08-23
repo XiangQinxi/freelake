@@ -18,6 +18,7 @@ FreeLake 数据层（api.py）
 
 依赖：peewee、Pillow、toml、streamlit（仅用于 secrets 与缩略图缓存）。
 """
+
 import base64
 import datetime
 import hashlib
@@ -275,9 +276,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 db.connect()
-db.create_tables(
-    [_User, _Post, _Comment, _Like, _Bookmark, _Report, _Draft], safe=True
-)
+db.create_tables([_User, _Post, _Comment, _Like, _Bookmark, _Report, _Draft], safe=True)
 
 # 启动引导：创建管理员账号（凭据来自 secrets / 环境变量 / config.toml）
 _admin = admin_credentials()
@@ -574,9 +573,9 @@ class Post:
         """统计每篇文章的点赞/收藏数，返回 {postid: count}（用于按量排序）。"""
         return {
             row["postid"]: row["cnt"]
-            for row in model.select(
-                model.postid, fn.COUNT(model.userid).alias("cnt")
-            ).group_by(model.postid).dicts()
+            for row in model.select(model.postid, fn.COUNT(model.userid).alias("cnt"))
+            .group_by(model.postid)
+            .dicts()
         }
 
     @staticmethod
@@ -613,9 +612,7 @@ class Post:
             model = _Like if sort_by == "likes" else _Bookmark
             counts = Post._like_or_bookmark_counts(model)
             posts = list(query.dicts())
-            posts.sort(
-                key=lambda p: (counts.get(p["id"], 0), p["id"]), reverse=True
-            )
+            posts.sort(key=lambda p: (counts.get(p["id"], 0), p["id"]), reverse=True)
             start = (page - 1) * page_size
             return posts[start : start + page_size]
 
@@ -673,9 +670,7 @@ class Post:
         if comment_ids:
             comments_map = {
                 r["id"]: r
-                for r in _Comment.select()
-                .where(_Comment.id.in_(comment_ids))
-                .dicts()
+                for r in _Comment.select().where(_Comment.id.in_(comment_ids)).dicts()
             }
         comments = []
         valid_ids = []
@@ -713,7 +708,9 @@ class Post:
         result: dict[int, dict] = {}
         if not ids:
             return result
-        by_id = {r["id"]: r for r in _Comment.select().where(_Comment.id.in_(ids)).dicts()}
+        by_id = {
+            r["id"]: r for r in _Comment.select().where(_Comment.id.in_(ids)).dicts()
+        }
         for p in posts:
             cids = p.get("comments") or []
             if cids and cids[-1] in by_id:
@@ -995,9 +992,7 @@ class Report:
         return q.count()
 
     @staticmethod
-    def handle(
-        report_id: int, handled_by: str, action: str, note: str = ""
-    ) -> bool:
+    def handle(report_id: int, handled_by: str, action: str, note: str = "") -> bool:
         """处理举报：action 为 handled（已处理）或 dismissed（驳回/误报）。"""
         if action not in ("handled", "dismissed"):
             return False
@@ -1111,9 +1106,7 @@ def save_avatar(uploaded_file) -> dict:
             top = (height - side) // 2
             img = img.crop((left, top, left + side, top + side))  # NOQA
         if img.width > MAX_AVATAR_DIM:
-            img = img.resize(
-                (MAX_AVATAR_DIM, MAX_AVATAR_DIM), Image.LANCZOS
-            )  # NOQA
+            img = img.resize((MAX_AVATAR_DIM, MAX_AVATAR_DIM), Image.LANCZOS)  # NOQA
         if img.mode in ("RGBA", "LA", "PA", "P"):
             # 有透明通道时平铺到白色底再转 RGB，避免 JPEG 出现黑底
             rgba = img.convert("RGBA")
@@ -1368,11 +1361,7 @@ def search_comments(keyword: str) -> list[dict]:
 def get_orphaned_comments() -> list[dict]:
     """找出所属文章已被删除的孤立评论"""
     existing_ids = {p.id for p in _Post.select(_Post.id)}
-    return [
-        c
-        for c in _Comment.select().dicts()
-        if c["postid"] not in existing_ids
-    ]
+    return [c for c in _Comment.select().dicts() if c["postid"] not in existing_ids]
 
 
 def delete_orphaned_comments() -> int:

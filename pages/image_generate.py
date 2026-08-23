@@ -9,6 +9,7 @@ FreeLake 图片生成（pages/image_generate.py）
 注意：页面级 ``st.set_page_config`` 不可用——入口 main.py 已统一设置，
 在 st.navigation 的页面中重复调用会报错。
 """
+
 import base64
 import urllib.request
 

@@ -15,6 +15,7 @@ FreeLake 管理员页面（pages/admin.py）
 安全说明：页面展示的用户数据已剔除 password / secret_key 等敏感列；
 文件浏览器只指向 attachments 目录而非源码目录。
 """
+
 import os
 
 import altair as alt
@@ -22,30 +23,14 @@ import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
-from api import (
-    ATTACHMENTS_DIR,
-    Post,
-    Report,
-    User,
-    delete_comment_by_id,
-    delete_orphaned_attachments,
-    delete_orphaned_comments,
-    execute_sql,
-    export_comments_csv,
-    export_comments_json,
-    export_posts_csv,
-    export_posts_json,
-    export_users_csv,
-    export_users_json,
-    format_size,
-    get_all_attachments,
-    get_attachment_stats,
-    get_comment_summary,
-    get_orphaned_attachments,
-    get_orphaned_comments,
-    search_comments,
-    sha256,
-)
+from api import (ATTACHMENTS_DIR, Post, Report, User, delete_comment_by_id,
+                 delete_orphaned_attachments, delete_orphaned_comments,
+                 execute_sql, export_comments_csv, export_comments_json,
+                 export_posts_csv, export_posts_json, export_users_csv,
+                 export_users_json, format_size, get_all_attachments,
+                 get_attachment_stats, get_comment_summary,
+                 get_orphaned_attachments, get_orphaned_comments,
+                 search_comments, sha256)
 
 st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 
@@ -65,6 +50,7 @@ with st.expander("统计概览", expanded=True):
     col4.metric("附件总数", stats["count"])
     col5.metric("附件总大小", format_size(stats["total_size"]))
 # endregion
+
 
 # region 数据图表
 def _daily_counts(records, date_key="created_at"):
@@ -220,7 +206,9 @@ with st.expander("用户管理", expanded=True):
             col_x, col_y = st.columns(2, vertical_alignment="bottom")
             if col_x.button("确认删除", type="primary", key="confirm_del_user"):
                 try:
-                    if user.delete(confirm_uid, None, admin_secret_key=state["secretkey"]):
+                    if user.delete(
+                        confirm_uid, None, admin_secret_key=state["secretkey"]
+                    ):
                         st.success(f"已删除用户 {confirm_uid}")
                         del st.session_state["del_user_confirm"]
                         st.rerun()
@@ -412,7 +400,9 @@ with st.expander("举报管理", expanded=True):
                 st.caption(f"理由：{r['reason']} · {r['created_at']}")
                 if r["status"] == "pending":
                     col_a, col_b, col_c = st.columns(3)
-                    if col_a.button("标记已处理", key=f"rep_ok_{r['id']}", type="primary"):
+                    if col_a.button(
+                        "标记已处理", key=f"rep_ok_{r['id']}", type="primary"
+                    ):
                         Report.handle(r["id"], state["userid"], "handled")
                         st.toast("已标记为处理")
                         st.rerun()
@@ -423,13 +413,17 @@ with st.expander("举报管理", expanded=True):
                     if is_post:
                         if col_c.button("删除文章", key=f"rep_delpost_{r['id']}"):
                             Post.delete(r["postid"])  # NOQA
-                            Report.handle(r["id"], state["userid"], "handled", "已删除文章")
+                            Report.handle(
+                                r["id"], state["userid"], "handled", "已删除文章"
+                            )
                             st.toast("已删除文章并标记处理")
                             st.rerun()
                     elif r.get("commentid"):
                         if col_c.button("删除评论", key=f"rep_delcomment_{r['id']}"):
                             delete_comment_by_id(r["commentid"])
-                            Report.handle(r["id"], state["userid"], "handled", "已删除评论")
+                            Report.handle(
+                                r["id"], state["userid"], "handled", "已删除评论"
+                            )
                             st.toast("已删除评论并标记处理")
                             st.rerun()
                 else:
@@ -470,11 +464,11 @@ with st.expander("附件管理", expanded=True):
 
 # region 系统工具
 with st.expander("系统工具", expanded=False):
-    st.warning("⚠️ 仅支持只读 SQL 查询（SELECT / WITH / EXPLAIN / PRAGMA），写操作已被拦截！")
-    col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-    query = col1.text_input(
-        "SQL 查询语句", placeholder="例如：SELECT * FROM _user"
+    st.warning(
+        "⚠️ 仅支持只读 SQL 查询（SELECT / WITH / EXPLAIN / PRAGMA），写操作已被拦截！"
     )
+    col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
+    query = col1.text_input("SQL 查询语句", placeholder="例如：SELECT * FROM _user")
     if col2.button("执行查询"):
         if query:
             try:

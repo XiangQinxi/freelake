@@ -5,6 +5,7 @@ FreeLake 用户配置（pages/user_config.py）
 个人资料管理页面：查看当前用户信息、修改昵称/自我介绍/头像、修改密码、
 退出登录。修改密码成功后会把新密码同步回会话与 Cookie，避免被登出。
 """
+
 import streamlit as st
 
 from api import User, get_avatar_bytes, save_avatar

@@ -5,6 +5,7 @@ FreeLake 注册（pages/register.py）
 注册表单：校验密码强度（至少 8 位且包含字母与数字）、两次输入一致、
 用户ID不重复后创建账号，并直接以新账号登录（写入 Cookie 与会话状态）。
 """
+
 import streamlit as st
 
 from api import User

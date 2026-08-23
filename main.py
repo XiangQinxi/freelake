@@ -16,6 +16,7 @@ Streamlit 论坛应用的主入口脚本，负责：
 - 登录状态以「userid + 明文密码」形式保存在加密 Cookie 中，由
   ``api2.check_by_state`` 每次直接查库校验。
 """
+
 import os
 
 import streamlit as st

@@ -12,6 +12,7 @@ FreeLake 首页（pages/home.py）
 （``User.get_configs`` / ``Post.get_last_comments``），附件文件只读取一次，
 避免 N+1 查询与重复读盘。
 """
+
 import base64
 import datetime
 import io
@@ -22,17 +23,8 @@ from zipfile import ZipFile
 import streamlit as st
 from streamlit_video_background import render_video_background
 
-from api import (
-    Attachment,
-    Bookmark,
-    Like,
-    Post,
-    Report,
-    User,
-    format_size,
-    get_avatar_bytes,
-    sha256,
-)
+from api import (Attachment, Bookmark, Like, Post, Report, User, format_size,
+                 get_avatar_bytes, sha256)
 from api2 import check_by_state
 from const import admin, tags
 
@@ -156,9 +148,7 @@ def edit_comment_dialog(post_id, comment_index, current_content):
 @st.dialog("举报文章")
 def report_post_dialog(post):
     st.caption(f"举报文章：**{post['title']}**")
-    reason = st.text_area(
-        "举报理由", placeholder="请填写举报原因（必填）", height=120
-    )
+    reason = st.text_area("举报理由", placeholder="请填写举报原因（必填）", height=120)
     if st.button("提交举报", type="primary"):
         reason = reason.strip()
         if not reason:
@@ -181,9 +171,7 @@ def report_post_dialog(post):
 @st.dialog("举报评论")
 def report_comment_dialog(post_id, comment):
     st.caption(f"举报评论：{comment['content'][:60]}")
-    reason = st.text_area(
-        "举报理由", placeholder="请填写举报原因（必填）", height=120
-    )
+    reason = st.text_area("举报理由", placeholder="请填写举报原因（必填）", height=120)
     if st.button("提交举报", type="primary"):
         reason = reason.strip()
         if not reason:
@@ -265,16 +253,10 @@ def basic_information(post, _config=None, compact=False):
                 confirm_delete_post(post["id"])
             case ":material/report: 举报":
                 report_post_dialog(post)
-            case (
-                ":material/favorite: 取消点赞"
-                | ":material/favorite_border: 点赞"
-            ):
+            case ":material/favorite: 取消点赞" | ":material/favorite_border: 点赞":
                 Like.toggle(post["id"], state["userid"])
                 st.rerun()
-            case (
-                ":material/bookmark: 取消收藏"
-                | ":material/bookmark_border: 收藏"
-            ):
+            case ":material/bookmark: 取消收藏" | ":material/bookmark_border: 收藏":
                 Bookmark.toggle(post["id"], state["userid"])
                 st.rerun()
     if post["tags"]:
@@ -386,9 +368,7 @@ if user_id:
             st.caption(
                 f":material/badge: {role_name} · 注册于 {userconfig.get('created_at')}"
             )
-            st.markdown(
-                userconfig.get("description") or "这个用户很懒，什么也没留下~"
-            )
+            st.markdown(userconfig.get("description") or "这个用户很懒，什么也没留下~")
         st.divider()
 
         # 数据统计
@@ -498,9 +478,7 @@ else:
                         for att in attachments:
                             data = files.get(att.get("saved_name", ""))
                             if data:
-                                zf.writestr(
-                                    att.get("original_name", "download"), data
-                                )
+                                zf.writestr(att.get("original_name", "download"), data)
                     if missing:
                         st.warning(f"有 {len(missing)} 个附件文件已丢失，无法打包")
                     st.download_button(
@@ -818,9 +796,7 @@ else:
                             ):
                                 last_user = author_configs.get(last["userid"])
                                 name = (
-                                    last_user["username"]
-                                    if last_user
-                                    else "用户已注销"
+                                    last_user["username"] if last_user else "用户已注销"
                                 )
                                 st.markdown(
                                     f"**{name}**：{highlight_mentions(last['content'])} （{last['created_at']}）"

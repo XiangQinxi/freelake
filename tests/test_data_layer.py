@@ -8,28 +8,17 @@ FreeLake 数据层测试（tests/test_data_layer.py）
 
 所有用例使用唯一 userid，互不干扰；数据库为 conftest 提供的内存库。
 """
+
 import io
 import re
 import uuid
 
 import pytest
+from conftest import FakeUpload
 from PIL import Image
 
-from conftest import FakeUpload
-
-from api import (
-    Attachment,
-    Bookmark,
-    Draft,
-    Like,
-    Post,
-    Report,
-    User,
-    execute_sql,
-    hash_password,
-    sha256,
-    verify_password,
-)
+from api import (Attachment, Bookmark, Draft, Like, Post, Report, User,
+                 execute_sql, hash_password, sha256, verify_password)
 
 user_api = User()
 
@@ -108,9 +97,7 @@ def test_change_password_requires_original():
     assert user_api.login(u["userid"], "newpass123") is False
     # 原密码正确 → 允许
     assert (
-        user_api.modify(
-            u["userid"], password=u["password"], new_password="newpass123"
-        )
+        user_api.modify(u["userid"], password=u["password"], new_password="newpass123")
         is True
     )
     assert user_api.login(u["userid"], "newpass123") is True
@@ -261,10 +248,7 @@ def test_count_filtered_by_date_range():
     start = datetime.date(2024, 2, 1)
     end = datetime.date(2024, 3, 31)
     assert Post.count_filtered(start_date=start, end_date=end) == 2
-    ids = {
-        p["id"]
-        for p in Post.get_filtered_paginate(start_date=start, end_date=end)
-    }
+    ids = {p["id"] for p in Post.get_filtered_paginate(start_date=start, end_date=end)}
     assert ids == {p2, p3}
 
     # 只看起始日期（>= start）
@@ -314,8 +298,7 @@ def test_get_filtered_paginate_sort():
     # 收藏量：p1=1 排在其余（0）之前
     Bookmark.toggle(p1, a["userid"])
     bookmarks_sorted = [
-        p["id"]
-        for p in Post.get_filtered_paginate(sort_by="bookmarks", page_size=10)
+        p["id"] for p in Post.get_filtered_paginate(sort_by="bookmarks", page_size=10)
     ]
     assert bookmarks_sorted[0] == p1
 
@@ -434,7 +417,11 @@ def test_report_handle_and_status():
     u2 = make_user("r")
     pid = Post.publish(u["userid"], "t", "c", [])
     rid = Report.add(
-        u2["userid"], postid=pid, target_userid=u["userid"], content_preview="t", reason="x"
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="t",
+        reason="x",
     )
     assert Report.handle(rid, "admin", "handled", "已删除") is True
     r = Report.get(rid)
@@ -540,7 +527,11 @@ def test_report_post_and_comment_are_distinct():
     # 举报帖子与举报该帖下的评论是不同目标，互不误判为重复
     assert (
         Report.add(
-            u2["userid"], postid=pid, target_userid=u["userid"], content_preview="t", reason="帖子"
+            u2["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="t",
+            reason="帖子",
         )
         is not None
     )

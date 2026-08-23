@@ -11,6 +11,7 @@ FreeLake 发布文章（pages/publish.py）
 草稿：登录用户可将未完成内容保存为草稿，稍后从「草稿箱」继续编辑。
 草稿仅保留标题 / 内容 / 标签 / 专属密码，附件需在发布前重新上传。
 """
+
 import streamlit as st
 
 from api import Attachment, Draft, Post
@@ -31,9 +32,7 @@ if check_by_state():
             st.caption("暂无草稿。点击下方「保存草稿」可暂存当前内容。")
         else:
             for d in drafts:
-                c1, c2, c3 = st.columns(
-                    [0.6, 0.2, 0.2], vertical_alignment="center"
-                )
+                c1, c2, c3 = st.columns([0.6, 0.2, 0.2], vertical_alignment="center")
                 c1.markdown(f"**{d.get('title') or '（无标题）'}**")
                 c1.caption(d.get("updated_at", ""))
                 if c2.button("继续编辑", key=f"load_draft_{d['id']}"):
@@ -43,9 +42,7 @@ if check_by_state():
                     st.session_state["publish_tags"] = [
                         t for t in (d.get("tags") or []) if t in tags
                     ]
-                    st.session_state["publish_attpassword"] = (
-                        d.get("attpassword") or ""
-                    )
+                    st.session_state["publish_attpassword"] = d.get("attpassword") or ""
                     st.session_state["editing_draft_id"] = d["id"]
                     st.rerun()
                 if c3.button("删除", key=f"del_draft_{d['id']}"):
