@@ -599,25 +599,6 @@ else:
 
             selected_tag = st.pills(":material/filter_alt: 筛选", tags)
 
-            # 「仅显示已收藏」支持 ?bookmarked=1 直达（我的收藏入口）
-            bookmarked_param = params.get("bookmarked") == "1"
-            show_bookmarked = (
-                st.checkbox(
-                    ":material/bookmark: 仅显示已收藏",
-                    value=bookmarked_param if check_by_state() else False,
-                    disabled=not check_by_state(),
-                )
-                if check_by_state()
-                else False
-            )
-            if check_by_state() and show_bookmarked != bookmarked_param:
-                if show_bookmarked:
-                    params["bookmarked"] = "1"
-                else:
-                    if "bookmarked" in params:
-                        del params["bookmarked"]
-                st.rerun()
-
             # —— 排序（menu_button：点击展开排序项，选中后按钮文字同步变化）——
             sort_order = st.session_state.get("sort_order", DEFAULT_SORT)
             selected_sort = st.menu_button(
@@ -650,15 +631,10 @@ else:
         # endregion
 
         # region 分页
-        bookmarked_ids = None
-        if show_bookmarked and state.get("userid"):
-            bookmarked_ids = Bookmark.get_bookmarked_post_ids(state["userid"])
-
-        # 关键词 / 标签 / 收藏 / 发布时间统一在 SQL 层过滤，总数与列表口径一致
+        # 关键词 / 标签 / 发布时间统一在 SQL 层过滤，总数与列表口径一致
         total = Post.count_filtered(
             keyword=search_keyword or "",
             tag=selected_tag,
-            post_ids=bookmarked_ids,
             start_date=date_start,
             end_date=date_end,
         )
@@ -678,7 +654,6 @@ else:
             posts = Post.get_filtered_paginate(
                 keyword=search_keyword or "",
                 tag=selected_tag,
-                post_ids=bookmarked_ids,
                 page=page,
                 page_size=5,
                 start_date=date_start,
