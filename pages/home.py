@@ -16,10 +16,10 @@ import base64
 import datetime
 import io
 import json
-from pathlib import Path
 from zipfile import ZipFile
 
 import streamlit as st
+from streamlit_video_background import render_video_background
 
 from api import (
     Attachment,
@@ -45,105 +45,8 @@ SORT_KEYS = {
 DEFAULT_SORT = "按日期排序"
 DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
 
-# ---- 主页动态视频背景 ----
-# 视频由 server.enableStaticServing 映射到 /app/static/ 下（见 .streamlit/config.toml）。
-# 52MB 视频直接以 base64 内嵌会让页面体积膨胀到 ~70MB，因此走静态文件服务更合适；
-# 视频已用 FFmpeg 压缩为 1280x720/H.264，体积大幅减小。
-VIDEO_BG_URL = "/app/static/background_720p.mp4"
-VIDEO_BG_FILE = (
-    Path(__file__).resolve().parent.parent / "static" / "background_720p.mp4"
-)
-# 视频自身的视觉效果（按需调整）：模糊 8px + 50% 透明度
-VIDEO_BG_BLUR = "8px"
-VIDEO_BG_OPACITY = 0.5
-# 视频半透明时透出的页面底色（浅/深主题分别取 config.toml 的 backgroundColor）
-VIDEO_BG_BACKDROP_LIGHT = "#FFFFFF"
-VIDEO_BG_BACKDROP_DARK = "#0E0E0E"
-
-
-def _render_video_background():
-    """渲染全屏动态视频背景（background.mp4）。
-
-    - 视频用 `<video>` 元素固定在最底层（z-index:-1），内容区背景透明化使其透出；
-    - 视频本身按需模糊（blur）并以 50% 透明度叠加；
-    - 半透明视频透出的页面底色放到独立的 backdrop 元素上。由于 Streamlit 切换主题
-      时不会重跑脚本、`st.context.theme.type` 感知不到变化，这里除 Python 初值外，
-      再用一小段 JS 实时读取顶部导航栏的底色（并用 .stApp 的 color-scheme 兜底），
-      从而在切换主题时背景底色的变化也能跟随；
-    - 顶部导航/侧边栏保持主题自身底色（不透明），保证手机上导航抽屉文字可读；
-    - 文件不存在时静默跳过，不影响其它功能。
-    """
-    if not VIDEO_BG_FILE.exists():
-        return
-    initial = (
-        VIDEO_BG_BACKDROP_DARK
-        if st.context.theme.type == "dark"
-        else VIDEO_BG_BACKDROP_LIGHT
-    )
-
-    video_tag = (
-        '<div id="fl-video-bg" style="position:fixed; inset:0; z-index:-1; '
-        'overflow:hidden; pointer-events:none;">'
-        f'<div id="fl-bg-backdrop" style="position:absolute; inset:0; '
-        f'background-color:{initial};"></div>'
-        '<video autoplay loop muted playsinline '
-        'style="position:absolute; inset:0; width:100%; height:100%; '
-        'object-fit:cover; '
-        f'filter:blur({VIDEO_BG_BLUR}); opacity:{VIDEO_BG_OPACITY};" '
-        f'src="{VIDEO_BG_URL}"></video>'
-        '</div>'
-    )
-
-    style = """
-    <style>
-    /* 让主内容区背景透明，使最底层的视频背景透出。
-       注意：刻意不覆盖侧边栏/顶部导航，让其保留主题自身底色以保证可读。 */
-    .stApp,
-    [data-testid="stMain"],
-    [data-testid="stAppViewContainer"],
-    [data-testid="stMainBlockContainer"],
-    [data-testid="stBottom"],
-    [data-testid="stBottomBlockContainer"] {
-        background-color: transparent !important;
-    }
-    </style>
-    """
-
-    # 主题切换时 Streamlit 会实时修改 header 底色 / .stApp 的 color-scheme，但不会重跑
-    # 脚本。这里通过 MutationObserver 监听这些变化，把最新的主题底色同步到 backdrop。
-    sync_script = """
-    <script>
-    (function () {
-      var bd = document.getElementById('fl-bg-backdrop');
-      if (!bd) return;
-      function sync() {
-        if (!document.body.contains(bd)) return;
-        var bg = null;
-        var header = document.querySelector('[data-testid="stHeader"]');
-        if (header) {
-          var c = getComputedStyle(header).backgroundColor;
-          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') bg = c;
-        }
-        if (!bg) {
-          var app = document.querySelector('.stApp');
-          var cs = app ? getComputedStyle(app).colorScheme : '';
-          bg = (cs === 'dark') ? '#0E0E0E' : '#FFFFFF';
-        }
-        if (bg && bd.style.backgroundColor !== bg) bd.style.backgroundColor = bg;
-      }
-      sync();
-      [document.querySelector('[data-testid="stHeader"]'), document.querySelector('.stApp')]
-        .forEach(function (el) {
-          if (el) new MutationObserver(sync).observe(el, {
-            attributes: true, attributeFilter: ['style', 'class']
-          });
-        });
-      new MutationObserver(sync).observe(document.head, { childList: true, subtree: true });
-    })();
-    </script>
-    """
-
-    st.html(video_tag + style + sync_script, unsafe_allow_javascript=True)
+# 主页动态视频背景由 `streamlit_video_background` 扩展包提供（在下方主页视图处调用）。
+# 通过 `pip install -e streamlit-video-background` 已安装，可独立分发。
 
 
 user = User()
@@ -645,7 +548,13 @@ else:
     # endregion
     # region 主页显示
     else:
-        _render_video_background()
+        render_video_background(
+            "/app/static/background_720p.mp4",
+            blur="5px",
+            opacity=0.3,
+            backdrop_light="#FFFFFF",
+            backdrop_dark="#0E0E0E",
+        )
         st.markdown("### :material/forum: 欢迎来到 FreeLake")
         st.caption("分享趣事、校园生活与开发心得的自由论坛——写下你的第一篇帖子吧。")
 
