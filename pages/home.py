@@ -63,6 +63,25 @@ def highlight_mentions(text: str) -> str:
     )
 
 
+def avatar_link(container, avatar_name, userid, width):
+    """把头像渲染成可点击图，点击后在同一标签页跳转到用户主页（?user_id=）。
+
+    ``st.image(link=...)`` 在不同环境下可能新开标签页；这里改用不带 ``target``
+    的 ``<a>`` 包裹 ``img``，确保同标签跳转。
+    """
+    b64 = base64.b64encode(
+        get_avatar_bytes(avatar_name or "default_avatar.jpeg")
+    ).decode()
+    container.html(
+        f'<a href="?user_id={userid}" title="查看个人主页" '
+        f'style="display:inline-block;line-height:0;">'
+        f'<img src="data:image/jpeg;base64,{b64}" '
+        f'style="width:{width}px;height:{width}px;border-radius:50%;'
+        f'object-fit:cover;display:inline-block;"/>'
+        f"</a>"
+    )
+
+
 user = User()
 params = st.query_params
 state = st.session_state
@@ -195,42 +214,6 @@ def report_comment_dialog(post_id, comment):
                 st.warning("你已举报过该评论，管理员正在处理中")
 
 
-@st.dialog("编辑资料")
-def edit_profile_dialog(userconfig):
-    new_avatar = st.file_uploader(
-        "上传新头像", type="image/*", label_visibility="collapsed"
-    )
-    if new_avatar:
-        st.image(new_avatar, width=250)
-    new_username = st.text_input(
-        "用户名",
-        placeholder="请输入用户名",
-        value=userconfig.get("username"),  # NOQA
-    )
-    new_description = st.text_area(
-        "自我介绍",
-        placeholder="请输入自我介绍",
-        value=userconfig.get("description"),  # NOQA
-    )
-    if st.button("保存修改"):
-        if not new_username or not new_description:
-            st.error("请输入用户名和自我介绍！")
-        else:
-            meta = save_avatar(new_avatar) if new_avatar else {}
-            ok = user.modify(
-                state.get("userid"),
-                state.get("password"),
-                username=new_username,
-                description=new_description,
-                avatar=meta.get("path") if new_avatar else None,
-            )
-            if ok:
-                st.toast("用户信息修改成功！")
-                st.rerun()
-            else:
-                st.error("修改失败：请检查密码或登录状态已过期")
-
-
 # endregion
 
 
@@ -252,11 +235,7 @@ def basic_information(post, _config=None, compact=False):
         avatar = "default_avatar.jpeg"
         username = "用户已注销"
 
-    col_1.image(
-        get_avatar_bytes(avatar),
-        width=55,
-        link=f"?user_id={post['authorid']}",
-    )
+    avatar_link(col_1, avatar, post["authorid"], 55)
     col_2.subheader(post["title"])
     if check_by_state():
         # 更多菜单：作者/管理员可编辑、删除；其他登录用户可举报；所有登录用户可点赞、收藏
@@ -424,12 +403,43 @@ if user_id:
         if is_self:
             with st.container(border=True):
                 st.caption(":material/manage_accounts: 账号设置")
-                col_set, col_log = st.columns([0.8, 0.2])
-                if col_set.button(
-                    ":material/edit: 编辑资料", type="primary", width="stretch"
-                ):
-                    edit_profile_dialog(userconfig)
-                with col_set.popover(
+                # —— 内联编辑资料（直接在页面展示，不弹新窗口）——
+                st.markdown("#### :material/account_circle: 编辑资料")
+                new_avatar = st.file_uploader(
+                    "上传新头像", type="image/*", label_visibility="collapsed"
+                )
+                if new_avatar:
+                    st.image(new_avatar, width=150)
+                new_username = st.text_input(
+                    "用户名",
+                    placeholder="请输入用户名",
+                    value=userconfig.get("username"),  # NOQA
+                )
+                new_description = st.text_area(
+                    "自我介绍",
+                    placeholder="请输入自我介绍",
+                    value=userconfig.get("description"),  # NOQA
+                )
+                if st.button(":material/save: 保存修改", type="primary"):
+                    if not new_username or not new_description:
+                        st.error("请输入用户名和自我介绍！")
+                    else:
+                        meta = save_avatar(new_avatar) if new_avatar else {}
+                        ok = user.modify(
+                            state.get("userid"),
+                            state.get("password"),
+                            username=new_username,
+                            description=new_description,
+                            avatar=meta.get("path") if new_avatar else None,
+                        )
+                        if ok:
+                            st.toast("用户信息修改成功！")
+                            st.rerun()
+                        else:
+                            st.error("修改失败：请检查密码或登录状态已过期")
+                # —— 修改密码 / 退出登录 ——
+                col_pass, col_log = st.columns(2)
+                with col_pass.popover(
                     ":material/password: 修改密码", type="secondary"
                 ):
                     original_password = st.text_input(
@@ -651,11 +661,7 @@ else:
                             col_a, col_b, col_c = st.columns(
                                 [0.08, 0.82, 0.1], vertical_alignment="top"
                             )
-                            col_a.image(
-                                get_avatar_bytes(cfg["avatar"]),
-                                width=40,
-                                link=f"?user_id={comment['userid']}",
-                            )
+                            avatar_link(col_a, cfg["avatar"], comment["userid"], 40)
                             col_b.markdown(
                                 f":blue-badge[{index + 1}楼] **{cfg['username']}**"
                             )
