@@ -65,13 +65,17 @@ def _render_video_background():
     """渲染全屏动态视频背景（background.mp4）。
 
     - 视频用 `<video>` 元素固定在最底层（z-index:-1），内容区背景透明化使其透出；
-    - 视频本身按需模糊（blur）并以 50% 透明度叠加，透出随主题变化的页面底色，
-      从而在保证文字可读的同时呈现柔和动态背景；
+    - 视频本身按需模糊（blur）并以 50% 透明度叠加；
+    - 半透明视频透出的页面底色放到独立的 backdrop 元素上。由于 Streamlit 切换主题
+      时不会重跑脚本、`st.context.theme.type` 感知不到变化，这里除 Python 初值外，
+      再用一小段 JS 实时读取顶部导航栏的底色（并用 .stApp 的 color-scheme 兜底），
+      从而在切换主题时背景底色的变化也能跟随；
+    - 顶部导航/侧边栏保持主题自身底色（不透明），保证手机上导航抽屉文字可读；
     - 文件不存在时静默跳过，不影响其它功能。
     """
     if not VIDEO_BG_FILE.exists():
         return
-    backdrop = (
+    initial = (
         VIDEO_BG_BACKDROP_DARK
         if st.context.theme.type == "dark"
         else VIDEO_BG_BACKDROP_LIGHT
@@ -80,6 +84,8 @@ def _render_video_background():
     video_tag = (
         '<div id="fl-video-bg" style="position:fixed; inset:0; z-index:-1; '
         'overflow:hidden; pointer-events:none;">'
+        f'<div id="fl-bg-backdrop" style="position:absolute; inset:0; '
+        f'background-color:{initial};"></div>'
         '<video autoplay loop muted playsinline '
         'style="position:absolute; inset:0; width:100%; height:100%; '
         'object-fit:cover; '
@@ -88,25 +94,56 @@ def _render_video_background():
         '</div>'
     )
 
-    style = f"""
+    style = """
     <style>
-    /* 半透明视频透出的页面底色，随主题变化 */
-    body {{ background-color: {backdrop} !important; }}
-    /* 让主内容区背景透明，使最底层的视频背景透出 */
+    /* 让主内容区背景透明，使最底层的视频背景透出。
+       注意：刻意不覆盖侧边栏/顶部导航，让其保留主题自身底色以保证可读。 */
     .stApp,
-    [data-testid="stHeader"],
     [data-testid="stMain"],
     [data-testid="stAppViewContainer"],
     [data-testid="stMainBlockContainer"],
     [data-testid="stBottom"],
-    [data-testid="stBottomBlockContainer"],
-    [data-testid="stSidebar"] {{
+    [data-testid="stBottomBlockContainer"] {
         background-color: transparent !important;
-    }}
+    }
     </style>
     """
 
-    st.html(video_tag + style)
+    # 主题切换时 Streamlit 会实时修改 header 底色 / .stApp 的 color-scheme，但不会重跑
+    # 脚本。这里通过 MutationObserver 监听这些变化，把最新的主题底色同步到 backdrop。
+    sync_script = """
+    <script>
+    (function () {
+      var bd = document.getElementById('fl-bg-backdrop');
+      if (!bd) return;
+      function sync() {
+        if (!document.body.contains(bd)) return;
+        var bg = null;
+        var header = document.querySelector('[data-testid="stHeader"]');
+        if (header) {
+          var c = getComputedStyle(header).backgroundColor;
+          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') bg = c;
+        }
+        if (!bg) {
+          var app = document.querySelector('.stApp');
+          var cs = app ? getComputedStyle(app).colorScheme : '';
+          bg = (cs === 'dark') ? '#0E0E0E' : '#FFFFFF';
+        }
+        if (bg && bd.style.backgroundColor !== bg) bd.style.backgroundColor = bg;
+      }
+      sync();
+      [document.querySelector('[data-testid="stHeader"]'), document.querySelector('.stApp')]
+        .forEach(function (el) {
+          if (el) new MutationObserver(sync).observe(el, {
+            attributes: true, attributeFilter: ['style', 'class']
+          });
+        });
+      new MutationObserver(sync).observe(document.head, { childList: true, subtree: true });
+    })();
+    </script>
+    """
+
+    st.html(video_tag + style + sync_script, unsafe_allow_javascript=True)
 
 
 user = User()
