@@ -13,12 +13,12 @@ FreeLake 首页（pages/home.py）
 避免 N+1 查询与重复读盘。
 """
 import base64
+import datetime
 import io
 import json
 from zipfile import ZipFile
 
 import streamlit as st
-from streamlit_extras.pagination import pagination
 
 from api import (
     Attachment,
@@ -606,6 +606,26 @@ else:
                     if "bookmarked" in params:
                         del params["bookmarked"]
                 st.rerun()
+
+            # —— 发布时间筛选（勾选后按日期区间过滤文章）——
+            date_filter_on = st.checkbox(
+                ":material/calendar_month: 按发布时间筛选",
+                key="home_date_filter_enabled",
+            )
+            date_start = date_end = None
+            if date_filter_on:
+                today = datetime.date.today()
+                date_sel = st.date_input(
+                    ":material/calendar_month: 发布时间范围",
+                    value=(today - datetime.timedelta(days=7), today),
+                    min_value=datetime.date(2000, 1, 1),
+                    max_value=today,
+                    format="YYYY-MM-DD",
+                    key="home_date_range",
+                )
+                # 清除到空时返回空元组，可不应用日期过滤（等价于不限日期）
+                if date_sel and len(date_sel) == 2:
+                    date_start, date_end = date_sel[0], date_sel[1]
         # endregion
 
         # region 分页
@@ -613,13 +633,17 @@ else:
         if show_bookmarked and state.get("userid"):
             bookmarked_ids = Bookmark.get_bookmarked_post_ids(state["userid"])
 
-        # 关键词 / 标签 / 收藏统一在 SQL 层过滤，总数与列表口径一致
+        # 关键词 / 标签 / 收藏 / 发布时间统一在 SQL 层过滤，总数与列表口径一致
         total = Post.count_filtered(
-            keyword=search_keyword or "", tag=selected_tag, post_ids=bookmarked_ids
+            keyword=search_keyword or "",
+            tag=selected_tag,
+            post_ids=bookmarked_ids,
+            start_date=date_start,
+            end_date=date_end,
         )
 
         with st.bottom:
-            page = pagination(
+            page = st.pagination(
                 num_pages=max(total // 5 + 1, 1),
                 max_visible_pages=5,
                 key="interactive_pagination",
@@ -636,6 +660,8 @@ else:
                 post_ids=bookmarked_ids,
                 page=page,
                 page_size=5,
+                start_date=date_start,
+                end_date=date_end,
             )
 
             if not posts:

@@ -236,6 +236,45 @@ def test_count_filtered_and_paginate_consistent():
     assert len(Post.get_filtered_paginate(tag="趣事分享", page=2, page_size=1)) == 1
 
 
+def test_count_filtered_by_date_range():
+    """发布时间范围过滤：SQL 层生效，计数与列表口径一致（起止日期均含）。"""
+    import datetime
+
+    import api
+
+    u = make_user()
+    p1 = Post.publish(u["userid"], "一月发布", "内容A", [])
+    p2 = Post.publish(u["userid"], "二月发布", "内容B", [])
+    p3 = Post.publish(u["userid"], "三月发布", "内容C", [])
+
+    # 人为指定 created_at 日期（默认均为当前时间）
+    for pid, ts in {
+        p1: "2024-01-15 10:00:00",
+        p2: "2024-02-20 10:00:00",
+        p3: "2024-03-10 10:00:00",
+    }.items():
+        api._Post.update(created_at=ts).where(api._Post.id == pid).execute()
+
+    # 起止日期均含：2 月 1 日 ~ 3 月 31 日 → p2 / p3
+    start = datetime.date(2024, 2, 1)
+    end = datetime.date(2024, 3, 31)
+    assert Post.count_filtered(start_date=start, end_date=end) == 2
+    ids = {
+        p["id"]
+        for p in Post.get_filtered_paginate(start_date=start, end_date=end)
+    }
+    assert ids == {p2, p3}
+
+    # 只看起始日期（>= start）
+    assert Post.count_filtered(start_date=start) == 2
+
+    # 只看结束日期（<= end）
+    assert Post.count_filtered(end_date=datetime.date(2024, 1, 31)) == 1
+
+    # 区间不命中
+    assert Post.count_filtered(start_date=datetime.date(2025, 1, 1)) == 0
+
+
 def test_get_by_author():
     """F3：个人主页文章列表。"""
     u = make_user()

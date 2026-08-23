@@ -17,6 +17,7 @@ FreeLake 管理员页面（pages/admin.py）
 """
 import os
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
@@ -62,6 +63,97 @@ with st.expander("统计概览", expanded=True):
     col3.metric("评论总数", len(all_comments))
     col4.metric("附件总数", stats["count"])
     col5.metric("附件总大小", format_size(stats["total_size"]))
+# endregion
+
+# region 数据图表
+def _daily_counts(records, date_key="created_at"):
+    """按发布时间/记录日期聚合为「连续日期」序列（缺失日期补 0）。
+
+    传入 ``post.get_all()`` / ``get_comment_summary()`` 等含
+    ``created_at``（``YYYY-MM-DD HH:MM:SS``）的记录列表。
+    """
+    dates = [r[date_key][:10] for r in records if r.get(date_key)]  # NOQA
+    if not dates:
+        return pd.DataFrame(columns=["日期", "数量"])
+    series = pd.Series(dates).value_counts().sort_index()
+    full_idx = pd.date_range(
+        pd.to_datetime(series.index.min()),
+        pd.to_datetime(series.index.max()),
+        freq="D",
+    ).strftime("%Y-%m-%d")
+    series = series.reindex(full_idx, fill_value=0)
+    return pd.DataFrame({"日期": series.index, "数量": series.values})
+
+
+with st.expander("数据图表", expanded=True):
+    posts_all = Post.get_all()
+    users_all = User.get_all()
+    comments_all = get_comment_summary()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.container(border=True):
+            st.subheader("文章发布趋势")
+            df = _daily_counts(posts_all)
+            if df.empty:
+                st.info("暂无文章数据", icon=":material/bar_chart:")
+            else:
+                st.area_chart(df, x="日期", y="数量")
+    with c2:
+        with st.container(border=True):
+            st.subheader("评论发表趋势")
+            df = _daily_counts(comments_all)
+            if df.empty:
+                st.info("暂无评论数据", icon=":material/bar_chart:")
+            else:
+                st.line_chart(df, x="日期", y="数量")
+
+    c3, c4 = st.columns(2)
+    with c3:
+        with st.container(border=True):
+            st.subheader("用户注册趋势")
+            df = _daily_counts(users_all)
+            if df.empty:
+                st.info("暂无用户数据", icon=":material/bar_chart:")
+            else:
+                st.area_chart(df, x="日期", y="数量")
+    with c4:
+        with st.container(border=True):
+            st.subheader("文章标签分布")
+            flat_tags = [t for p in posts_all for t in (p.get("tags") or [])]
+            if not flat_tags:
+                st.info("暂无标签数据", icon=":material/bar_chart:")
+            else:
+                tag_df = pd.Series(flat_tags).value_counts().reset_index()
+                tag_df.columns = ["标签", "数量"]
+                st.bar_chart(tag_df, x="标签", y="数量")
+
+    c5, c6 = st.columns(2)
+    with c5:
+        with st.container(border=True):
+            st.subheader("文章作者 Top 10")
+            authors = [p["authorid"] for p in posts_all]
+            if not authors:
+                st.info("暂无文章数据", icon=":material/bar_chart:")
+            else:
+                author_df = pd.Series(authors).value_counts().head(10).reset_index()
+                author_df.columns = ["作者", "文章数"]
+                st.bar_chart(author_df, x="作者", y="文章数", horizontal=True)
+    with c6:
+        with st.container(border=True):
+            st.subheader("用户角色分布")
+            roles = [u["role"] for u in users_all]
+            if not roles:
+                st.info("暂无用户数据", icon=":material/bar_chart:")
+            else:
+                role_df = pd.Series(roles).value_counts().reset_index()
+                role_df.columns = ["角色", "用户数"]
+                role_chart = (
+                    alt.Chart(role_df)
+                    .mark_arc(innerRadius=45)
+                    .encode(theta="用户数:Q", color=alt.Color("角色:N"))
+                )
+                st.altair_chart(role_chart)
 # endregion
 
 # region 用户管理

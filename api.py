@@ -478,11 +478,15 @@ class Post:
         keyword: str = "",
         tag: str | None = None,
         post_ids: typing.Iterable[int] | None = None,
+        start_date: datetime.date | None = None,
+        end_date: datetime.date | None = None,
     ):
-        """按关键词 / 标签 / 文章 ID 集合过滤查询（SQL 层，供计数与分页共用）。
+        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤查询（SQL 层，供计数与分页共用）。
 
         标签使用 JSONField.contains —— SQLite 上为精确的 JSON 数组元素匹配，
-        避免子串误匹配；关键词为标题或内容的模糊搜索。
+        避免子串误匹配；关键词为标题或内容的模糊搜索。发布时间按
+        ``created_at``（``YYYY-MM-DD HH:MM:SS`` 字符串，字典序即时间序）的
+        日期区间过滤，起止日期均包含在范围内。
         """
         if keyword:
             query = query.where(
@@ -492,6 +496,14 @@ class Post:
             query = query.where(_Post.tags.contains(tag))
         if post_ids is not None:
             query = query.where(_Post.id.in_(post_ids))
+        if start_date is not None:
+            query = query.where(
+                _Post.created_at >= start_date.strftime("%Y-%m-%d") + " 00:00:00"
+            )
+        if end_date is not None:
+            query = query.where(
+                _Post.created_at <= end_date.strftime("%Y-%m-%d") + " 23:59:59"
+            )
         return query
 
     @staticmethod
@@ -499,9 +511,13 @@ class Post:
         keyword: str = "",
         tag: str | None = None,
         post_ids: typing.Iterable[int] | None = None,
+        start_date: datetime.date | None = None,
+        end_date: datetime.date | None = None,
     ) -> int:
-        """按关键词 / 标签 / 文章 ID 集合统计文章总数（用于分页，与列表口径一致）。"""
-        return Post._apply_filters(_Post.select(), keyword, tag, post_ids).count()
+        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围统计文章总数（用于分页，与列表口径一致）。"""
+        return Post._apply_filters(
+            _Post.select(), keyword, tag, post_ids, start_date, end_date
+        ).count()
 
     @staticmethod
     def get_filtered_paginate(
@@ -510,10 +526,14 @@ class Post:
         post_ids: typing.Iterable[int] | None = None,
         page: int = 1,
         page_size: int = 5,
+        start_date: datetime.date | None = None,
+        end_date: datetime.date | None = None,
     ) -> list[dict[str, str]]:
-        """按关键词 / 标签 / 文章 ID 集合过滤后分页获取文章（发布时间倒序）。"""
+        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤后分页获取文章（发布时间倒序）。"""
         return (
-            Post._apply_filters(_Post.select(), keyword, tag, post_ids)
+            Post._apply_filters(
+                _Post.select(), keyword, tag, post_ids, start_date, end_date
+            )
             .order_by(_Post.id.desc())
             .paginate(page, page_size)
             .dicts()
