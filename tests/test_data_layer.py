@@ -275,6 +275,49 @@ def test_count_filtered_by_date_range():
     assert Post.count_filtered(start_date=datetime.date(2025, 1, 1)) == 0
 
 
+def test_get_filtered_paginate_sort():
+    """排序：按日期 / 浏览量 / 点赞量 / 收藏量降序。"""
+    import api
+
+    a = make_user("a")
+    b = make_user("b")
+    p1 = Post.publish(a["userid"], "文章一", "内容", [])
+    p2 = Post.publish(b["userid"], "文章二", "内容", [])
+    p3 = Post.publish(a["userid"], "文章三", "内容", [])
+
+    # 浏览量
+    api._Post.update(views=10).where(api._Post.id == p1).execute()
+    api._Post.update(views=30).where(api._Post.id == p2).execute()
+    api._Post.update(views=20).where(api._Post.id == p3).execute()
+    views_sorted = [
+        p["id"] for p in Post.get_filtered_paginate(sort_by="views", page_size=10)
+    ]
+    assert views_sorted == [p2, p3, p1]
+
+    # 日期（默认）：最新在前
+    date_sorted = [
+        p["id"] for p in Post.get_filtered_paginate(sort_by="date", page_size=10)
+    ]
+    assert date_sorted == sorted([p1, p2, p3], reverse=True)
+
+    # 点赞量：p3=2 > p2=1 > p1=0
+    Like.toggle(p2, a["userid"])
+    Like.toggle(p3, a["userid"])
+    Like.toggle(p3, b["userid"])
+    likes_sorted = [
+        p["id"] for p in Post.get_filtered_paginate(sort_by="likes", page_size=10)
+    ]
+    assert likes_sorted == [p3, p2, p1]
+
+    # 收藏量：p1=1 排在其余（0）之前
+    Bookmark.toggle(p1, a["userid"])
+    bookmarks_sorted = [
+        p["id"]
+        for p in Post.get_filtered_paginate(sort_by="bookmarks", page_size=10)
+    ]
+    assert bookmarks_sorted[0] == p1
+
+
 def test_get_by_author():
     """F3：个人主页文章列表。"""
     u = make_user()

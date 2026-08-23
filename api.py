@@ -520,6 +520,16 @@ class Post:
         ).count()
 
     @staticmethod
+    def _like_or_bookmark_counts(model) -> dict[int, int]:
+        """统计每篇文章的点赞/收藏数，返回 {postid: count}（用于按量排序）。"""
+        return {
+            row["postid"]: row["cnt"]
+            for row in model.select(
+                model.postid, fn.COUNT(model.userid).alias("cnt")
+            ).group_by(model.postid).dicts()
+        }
+
+    @staticmethod
     def get_filtered_paginate(
         keyword: str = "",
         tag: str | None = None,
@@ -528,13 +538,38 @@ class Post:
         page_size: int = 5,
         start_date: datetime.date | None = None,
         end_date: datetime.date | None = None,
+        sort_by: str = "date",
     ) -> list[dict[str, str]]:
-        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤后分页获取文章（发布时间倒序）。"""
-        return (
-            Post._apply_filters(
-                _Post.select(), keyword, tag, post_ids, start_date, end_date
+        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤后分页获取文章。
+
+        ``sort_by`` 支持四种排序：``date``（发布时间倒序，默认）、``views``
+        （浏览量降序）、``likes``（点赞量降序）、``bookmarks``（收藏量降序）。
+        点赞/收藏量在 SQL 层聚合后于 Python 侧排序分页（论坛数据量小，成本可忽略），
+        保证总数分页口径一致。
+        """
+        query = Post._apply_filters(
+            _Post.select(), keyword, tag, post_ids, start_date, end_date
+        )
+
+        if sort_by == "views":
+            return (
+                query.order_by(_Post.views.desc(), _Post.id.desc())
+                .paginate(page, page_size)
+                .dicts()
             )
-            .order_by(_Post.id.desc())
+
+        if sort_by in ("likes", "bookmarks"):
+            model = _Like if sort_by == "likes" else _Bookmark
+            counts = Post._like_or_bookmark_counts(model)
+            posts = list(query.dicts())
+            posts.sort(
+                key=lambda p: (counts.get(p["id"], 0), p["id"]), reverse=True
+            )
+            start = (page - 1) * page_size
+            return posts[start : start + page_size]
+
+        return (
+            query.order_by(_Post.created_at.desc(), _Post.id.desc())
             .paginate(page, page_size)
             .dicts()
         )

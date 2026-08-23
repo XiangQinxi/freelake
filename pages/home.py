@@ -33,6 +33,17 @@ from api import (
 from api2 import check_by_state
 from const import admin, tags
 
+# 主页排序选项（menu_button 展开项）与对应的查询排序键
+SORT_OPTIONS = ("按日期排序", "按点赞量排序", "按浏览量排序", "按收藏量排序")
+SORT_KEYS = {
+    "按日期排序": "date",
+    "按点赞量排序": "likes",
+    "按浏览量排序": "views",
+    "按收藏量排序": "bookmarks",
+}
+DEFAULT_SORT = "按日期排序"
+DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
+
 user = User()
 params = st.query_params
 state = st.session_state
@@ -607,25 +618,35 @@ else:
                         del params["bookmarked"]
                 st.rerun()
 
-            # —— 发布时间筛选（勾选后按日期区间过滤文章）——
-            date_filter_on = st.checkbox(
-                ":material/calendar_month: 按发布时间筛选",
-                key="home_date_filter_enabled",
+            # —— 排序（menu_button：点击展开排序项，选中后按钮文字同步变化）——
+            sort_order = st.session_state.get("sort_order", DEFAULT_SORT)
+            selected_sort = st.menu_button(
+                sort_order,
+                options=SORT_OPTIONS,
+                icon=":material/sort:",
+                key="home_sort_menu",
+                type="secondary",
             )
-            date_start = date_end = None
-            if date_filter_on:
-                today = datetime.date.today()
-                date_sel = st.date_input(
-                    ":material/calendar_month: 发布时间范围",
-                    value=(today - datetime.timedelta(days=7), today),
-                    min_value=datetime.date(2000, 1, 1),
-                    max_value=today,
-                    format="YYYY-MM-DD",
-                    key="home_date_range",
-                )
-                # 清除到空时返回空元组，可不应用日期过滤（等价于不限日期）
-                if date_sel and len(date_sel) == 2:
-                    date_start, date_end = date_sel[0], date_sel[1]
+            if selected_sort and selected_sort != sort_order:
+                st.session_state["sort_order"] = selected_sort
+                st.rerun()
+            sort_by = SORT_KEYS.get(sort_order, "date")
+
+            # —— 发布日期范围（默认：起点 2026-08-01，终点为今天；始终生效）——
+            today = datetime.date.today()
+            date_sel = st.date_input(
+                ":material/calendar_month: 发布日期范围",
+                value=(DEFAULT_DATE_START, today),
+                min_value=datetime.date(2020, 1, 1),
+                max_value=today,
+                format="YYYY-MM-DD",
+                key="home_date_range",
+            )
+            if date_sel and len(date_sel) == 2:
+                date_start, date_end = date_sel[0], date_sel[1]
+            else:
+                # 清空后回退到默认范围
+                date_start, date_end = DEFAULT_DATE_START, today
         # endregion
 
         # region 分页
@@ -644,7 +665,7 @@ else:
 
         with st.bottom:
             page = st.pagination(
-                num_pages=max(total // 5 + 1, 1),
+                num_pages=max((total + 5 - 1) // 5, 1),
                 max_visible_pages=5,
                 key="interactive_pagination",
             )
@@ -662,6 +683,7 @@ else:
                 page_size=5,
                 start_date=date_start,
                 end_date=date_end,
+                sort_by=sort_by,
             )
 
             if not posts:
