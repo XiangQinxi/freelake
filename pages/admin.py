@@ -25,6 +25,7 @@ from streamlit_file_browser import st_file_browser
 from api import (
     ATTACHMENTS_DIR,
     Post,
+    Report,
     User,
     delete_comment_by_id,
     delete_orphaned_attachments,
@@ -374,6 +375,69 @@ with st.expander("评论管理", expanded=True):
             with st.container(border=True):
                 st.caption("孤立评论列表（所属文章已被删除）")
                 st.dataframe(pd.DataFrame(orphans).astype(str), width="stretch")
+# endregion
+
+# region 举报管理
+with st.expander("举报管理", expanded=True):
+    pending = Report.count("pending")
+    handled = Report.count("handled")
+    dismissed = Report.count("dismissed")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("待处理", pending, border=True)
+    c2.metric("已处理", handled, border=True)
+    c3.metric("已驳回", dismissed, border=True)
+
+    status_map = {"pending": "待处理", "handled": "已处理", "dismissed": "已驳回"}
+    sel_status = st.segmented_control(
+        "状态筛选",
+        options=list(status_map.keys()),
+        format_func=lambda s: status_map[s],
+        default="pending",
+        selection_mode="single",
+    )
+    reports = Report.get_all(status=sel_status)
+    if not reports:
+        st.info("暂无举报记录", icon=":material/flag:")
+    else:
+        for r in reports:
+            with st.container(border=True):
+                is_post = bool(r.get("postid")) and not r.get("commentid")
+                target_kind = "文章" if is_post else "评论"
+                st.markdown(
+                    f"**:material/person: {r['reporter_userid']}** 举报了 "
+                    f"**{r['target_userid']}** 的{target_kind}"
+                )
+                if r.get("content_preview"):
+                    st.caption(f"内容摘要：{r['content_preview']}")
+                st.caption(f"理由：{r['reason']} · {r['created_at']}")
+                if r["status"] == "pending":
+                    col_a, col_b, col_c = st.columns(3)
+                    if col_a.button("标记已处理", key=f"rep_ok_{r['id']}", type="primary"):
+                        Report.handle(r["id"], state["userid"], "handled")
+                        st.toast("已标记为处理")
+                        st.rerun()
+                    if col_b.button("驳回", key=f"rep_no_{r['id']}"):
+                        Report.handle(r["id"], state["userid"], "dismissed")
+                        st.toast("已驳回该举报")
+                        st.rerun()
+                    if is_post:
+                        if col_c.button("删除文章", key=f"rep_delpost_{r['id']}"):
+                            Post.delete(r["postid"])  # NOQA
+                            Report.handle(r["id"], state["userid"], "handled", "已删除文章")
+                            st.toast("已删除文章并标记处理")
+                            st.rerun()
+                    elif r.get("commentid"):
+                        if col_c.button("删除评论", key=f"rep_delcomment_{r['id']}"):
+                            delete_comment_by_id(r["commentid"])
+                            Report.handle(r["id"], state["userid"], "handled", "已删除评论")
+                            st.toast("已删除评论并标记处理")
+                            st.rerun()
+                else:
+                    st.caption(
+                        f"处理结果：{status_map[r['status']]} · "
+                        f"由 {r['handled_by'] or '—'} 于 {r['handled_at'] or '—'} 处理"
+                        + (f" · {r['note']}" if r.get("note") else "")
+                    )
 # endregion
 
 # region 附件管理

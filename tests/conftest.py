@@ -35,7 +35,15 @@ def _clean_db():
     import api
 
     yield
-    for model in (api._User, api._Post, api._Comment, api._Like, api._Bookmark):
+    for model in (
+        api._User,
+        api._Post,
+        api._Comment,
+        api._Like,
+        api._Bookmark,
+        api._Report,
+        api._Draft,
+    ):
         model.delete().execute()
 
 

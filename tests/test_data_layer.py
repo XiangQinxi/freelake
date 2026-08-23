@@ -20,8 +20,10 @@ from conftest import FakeUpload
 from api import (
     Attachment,
     Bookmark,
+    Draft,
     Like,
     Post,
+    Report,
     User,
     execute_sql,
     hash_password,
@@ -384,6 +386,187 @@ def test_avatar_compression(tmp_dirs):
     img = Image.open(io.BytesIO(data))
     assert img.width == img.height
     assert img.width <= MAX_AVATAR_DIM
+
+
+# ---------- 举报（B1） ----------
+
+
+def test_report_add_and_deduplicate():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "被举报", "内容", [])
+    # 首次举报成功
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="被举报",
+        reason="广告",
+    )
+    assert rid is not None
+    # 相同举报人 + 同一目标 + pending → 不重复提交
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="被举报",
+            reason="广告",
+        )
+        is None
+    )
+    # 不同举报人可再次举报
+    assert (
+        Report.add(
+            u["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="被举报",
+            reason="违禁",
+        )
+        is not None
+    )
+    assert Report.count("pending") == 2
+
+
+def test_report_handle_and_status():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    rid = Report.add(
+        u2["userid"], postid=pid, target_userid=u["userid"], content_preview="t", reason="x"
+    )
+    assert Report.handle(rid, "admin", "handled", "已删除") is True
+    r = Report.get(rid)
+    assert r["status"] == "handled"
+    assert r["handled_by"] == "admin"
+    # 非法 action 拒绝
+    assert Report.handle(rid, "admin", "weird") is False
+
+
+def test_report_comment():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    cid = Post.add_comment(pid, u["userid"], "评论内容")
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        commentid=cid,
+        target_userid=u["userid"],
+        content_preview="评论内容",
+        reason="辱骂",
+    )
+    assert rid is not None
+    r = Report.get(rid)
+    assert r["commentid"] == cid
+    assert r["postid"] == pid
+
+
+# ---------- 作者筛选 / 作者统计（B4 / B5） ----------
+
+
+def test_count_filtered_by_author():
+    a = make_user("author")
+    b = make_user("writer")
+    p1 = Post.publish(a["userid"], "A 的文章一", "内容", [])
+    p2 = Post.publish(a["userid"], "A 的文章二", "内容", [])
+    p3 = Post.publish(b["userid"], "B 的文章", "内容", [])
+
+    # 按 userid 精确模糊（contains）
+    assert Post.count_filtered(author=a["userid"]) == 2
+    assert Post.count_filtered(author=a["userid"][:5]) == 2
+    # 无匹配作者 → 0
+    assert Post.count_filtered(author="不存在的人") == 0
+    # 与关键词组合
+    assert Post.count_filtered(keyword="文章一", author=a["userid"]) == 1
+    assert {p["id"] for p in Post.get_filtered_paginate(author=a["userid"])} == {p1, p2}
+
+
+def test_get_author_stats():
+    import api
+
+    a = make_user("hero")
+    b = make_user("fan")
+    pid = Post.publish(a["userid"], "标题", "内容", [])
+    p2 = Post.publish(a["userid"], "标题二", "内容", [])
+    api._Post.update(views=10).where(api._Post.id == pid).execute()
+    Like.toggle(pid, b["userid"])
+    Bookmark.toggle(pid, b["userid"])
+
+    stats = Post.get_author_stats(a["userid"])
+    assert stats["post_count"] == 2
+    assert stats["views"] == 10
+    assert stats["likes"] == 1
+    assert stats["bookmarks"] == 1
+    # 其他用户无文章
+    empty = Post.get_author_stats(b["userid"])
+    assert empty["post_count"] == 0
+
+
+# ---------- 草稿（B6） ----------
+
+
+def test_draft_save_load_delete():
+    u = make_user()
+    did = Draft.save(u["userid"], "草稿标题", "草稿内容", ["趣事分享"], "pw123")
+    assert did is not None
+    assert Draft.count(u["userid"]) == 1
+
+    d = Draft.get_draft(u["userid"], did)
+    assert d["title"] == "草稿标题"
+    assert d["tags"] == ["趣事分享"]
+
+    # 更新已有草稿
+    d2 = Draft.save(
+        u["userid"], "新标题", "新内容", ["技术分享"], "pw456", draft_id=did
+    )
+    assert d2 == did
+    assert Draft.get_draft(u["userid"], did)["title"] == "新标题"
+
+    # 仅本人可读/删
+    other = make_user("other")
+    assert Draft.get_draft(other["userid"], did) is None
+    assert Draft.delete(other["userid"], did) is False
+    assert Draft.delete(u["userid"], did) is True
+    assert Draft.count(u["userid"]) == 0
+
+
+def test_report_post_and_comment_are_distinct():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    cid = Post.add_comment(pid, u["userid"], "评论")
+    # 举报帖子与举报该帖下的评论是不同目标，互不误判为重复
+    assert (
+        Report.add(
+            u2["userid"], postid=pid, target_userid=u["userid"], content_preview="t", reason="帖子"
+        )
+        is not None
+    )
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            commentid=cid,
+            target_userid=u["userid"],
+            content_preview="评论",
+            reason="评论",
+        )
+        is not None
+    )
+    # 同一评论重复举报 → 去重
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            commentid=cid,
+            target_userid=u["userid"],
+            content_preview="评论",
+            reason="再来",
+        )
+        is None
+    )
 
 
 # ---------- 只读 SQL 守卫（S3） ----------

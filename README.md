@@ -10,11 +10,16 @@
 
 - **用户体系**：注册 / 登录 / 退出、个人资料（昵称、自我介绍、头像）、密码修改
 - **文章**：发布、编辑、删除、搜索、标签筛选、分页浏览、查看个人主页、浏览量统计
-- **评论**：文章评论区（最新一条评论展示在首页列表）、评论编辑/删除
+- **搜索**：关键词 + 作者 + 标签 + 日期范围组合筛选，关键词高亮展示
+- **评论**：文章评论区（最新一条评论展示在首页列表）、评论编辑/删除、Markdown 排版、楼层编号、@用户名 提及
 - **互动**：点赞、收藏、「我的收藏 / 我的发布」快捷入口
+- **举报**：文章 / 评论举报，管理后台受理（处理 / 驳回 / 删除目标）
+- **草稿**：未完成内容保存为草稿，从「草稿箱」继续编辑
+- **个人主页**：头像与简介横幅 + 发布 / 浏览 / 获赞 / 获藏统计
 - **附件**：多文件上传、图片在线预览（缩略图缓存）、音频/视频预览、ZIP 打包下载、附件专属密码保护
-- **管理后台**（管理员专属）：用户 / 文章 / 评论 / 附件管理、孤立数据清理、数据导出（CSV/JSON）、文件浏览
+- **管理后台**（管理员专属）：用户 / 文章 / 评论 / 附件 / 举报管理、孤立数据清理、数据导出（CSV/JSON）、文件浏览
 - **AI 图片生成**（管理员专属）：基于 OpenAI 兼容接口的文生图 / 图生图
+- **主题与移动端**：亮 / 暗主题可切换（暗色模式适配完善），移动端响应式适配
 - **安全**：密码 PBKDF2 加盐哈希（旧 sha256 自动升级）、管理员凭据不落仓库、Cookie 加密存储登录态
 
 ## 技术栈
@@ -102,7 +107,9 @@ freelake/
 | 类 / 函数 | 职责 |
 | --- | --- |
 | `User` | 注册、登录（含密码自动升级）、资料查询/修改、删除、批量查询 `get_configs` |
-| `Post` | 发布、编辑、删除、搜索分页、详情（评论批量加载）、评论增删、最新评论批量 `get_last_comments` |
+| `Post` | 发布、编辑、删除、搜索分页、详情（评论批量加载）、评论增删、最新评论批量 `get_last_comments`、组合筛选（关键词/标签/作者/日期）、`get_author_stats` 作者统计 |
+| `Report` | 举报提交（防重复）、查询、受理处理（处理 / 驳回） |
+| `Draft` | 草稿保存、更新、查询、删除 |
 | `Attachment` | 附件保存/读取、缩略图（`st.cache_data` 缓存 10 分钟） |
 | `Like` / `Bookmark` | 点赞、收藏（切换 / 查询 / 计数） |
 | `save_avatar` / `get_avatar_bytes` | 头像裁剪保存（相对路径）/ 读取（兼容旧绝对路径） |
@@ -118,6 +125,8 @@ freelake/
 | `_post` | id(自增), authorid, title, content, created_at, attachments(JSON), attpassword, tags(JSON), comments(JSON), views |
 | `_comment` | id(自增), postid, userid, content, created_at |
 | `_like` / `_bookmark` | postid, userid |
+| `_report` | postid(可空), commentid(可空), target_userid, reporter_userid, content_preview, reason, status(pending/handled/dismissed), handled_by, handled_at, note |
+| `_draft` | userid, title, content, tags(JSON), attpassword |
 
 ## 安全说明
 
@@ -140,7 +149,12 @@ freelake/
 ## 计划
 
 - [x] 首页文章展示最新一条评论
-- [ ] 完善举报功能
+- [x] 完善举报功能（文章 / 评论举报 + 后台受理）
+- [x] 评论 Markdown 排版、楼层编号、@提及
+- [x] 搜索升级（关键词高亮 + 作者筛选）
+- [x] 用户主页数据统计
+- [x] 草稿箱与继续编辑
+- [x] 暗色模式适配完善 + 移动端适配
 
 ## 许可证
 

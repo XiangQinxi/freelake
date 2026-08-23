@@ -73,9 +73,10 @@ else:
 # ---- 深色模式下 primary 控件文字改为黑色 ----
 # config.toml 没有控件文字色选项；深色主题 primaryColor 为白色（#FFFFFF），而 Streamlit
 # 默认在 primaryColor 上渲染白字（白底白字不可见）。这里仅在深色主题下注入 CSS，
-# 把主按钮 / 多选标签的文字改为黑色。
+# 把主按钮 / 多选标签 / 已选 chips 的文字改为黑色。
 # 覆盖：st.button、st.download_button（二者内部均渲染 stBaseButton-primary）、
-# st.form_submit_button（stBaseButton-primaryFormSubmit）、st.multiselect 已选标签（data-tag）。
+# st.form_submit_button（stBaseButton-primaryFormSubmit）、st.multiselect 已选标签（data-tag）、
+# st.pills / st.segmented_control 已选项。
 if st.context.theme.type == "dark":
     st.html(
         """
@@ -108,9 +109,43 @@ if st.context.theme.type == "dark":
         .stMultiSelect [data-tag]:focus-visible {
             color: #000000 !important;
         }
+        /* 已选 chips：st.pills / st.segmented_control */
+        [data-testid="stPills"] button[aria-checked="true"],
+        [data-testid="stSegmentedControl"] button[aria-checked="true"],
+        [data-testid="stPills"] button[aria-checked="true"]:hover,
+        [data-testid="stSegmentedControl"] button[aria-checked="true"]:hover {
+            color: #000000 !important;
+        }
         </style>
         """
     )
+
+# ---- 移动端适配（窄屏下收紧留白与字号，允许栅格换行） ----
+st.html(
+    """
+    <style>
+    @media (max-width: 600px) {
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            padding-left: 0.9rem;
+            padding-right: 0.9rem;
+        }
+        [data-testid="stColumns"] {
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+        [data-testid="stColumn"] {
+            min-width: 45% !important;
+        }
+        h1 { font-size: 1.55rem !important; }
+        h2 { font-size: 1.25rem !important; }
+        h3 { font-size: 1.1rem !important; }
+        [data-testid="stVerticalBlock"] { gap: 0.6rem; }
+    }
+    </style>
+    """
+)
 
 # ---- 页面注册（st.navigation 多页应用） ----
 home_page = st.Page("pages/home.py", title=":material/home: 首页")

@@ -35,7 +35,7 @@ from peewee import *
 from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
 
-from const import admin, user
+from const import admin, announcement_tags, user
 
 db = SqliteDatabase("data.db")
 salt = "freelake"
@@ -150,6 +150,40 @@ class _Bookmark(BaseModel):
     userid = CharField()
 
 
+class _Report(BaseModel):
+    """文章/评论举报记录（数据表 _report）。"""
+
+    id = AutoField()  # 数据库自增主键
+    postid = IntegerField(null=True)  # 被举报文章（举报评论时也记录所属文章）
+    commentid = IntegerField(null=True)  # 被举报评论
+    target_userid = CharField()  # 被举报内容的作者
+    reporter_userid = CharField()  # 举报人
+    content_preview = TextField(default="")  # 被举报内容摘要快照（删除后仍可追溯）
+    reason = TextField()  # 举报理由
+    status = CharField(default="pending")  # pending / handled / dismissed
+    handled_by = CharField(default="")
+    handled_at = CharField(default="")
+    note = TextField(default="")
+    created_at = CharField()
+
+
+class _Draft(BaseModel):
+    """用户草稿（数据表 _draft）。
+
+    仅保留标题 / 内容 / 标签 / 专属密码；附件不落盘，需在发布前重新上传，
+    避免草稿产生孤立附件文件。
+    """
+
+    id = AutoField()
+    userid = CharField()
+    title = TextField(default="")
+    content = TextField(default="")
+    tags = JSONField(default=list)
+    attpassword = CharField(default="")
+    created_at = CharField()
+    updated_at = CharField()
+
+
 # endregion
 
 
@@ -241,7 +275,9 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 db.connect()
-db.create_tables([_User, _Post, _Comment, _Like, _Bookmark], safe=True)
+db.create_tables(
+    [_User, _Post, _Comment, _Like, _Bookmark, _Report, _Draft], safe=True
+)
 
 # 启动引导：创建管理员账号（凭据来自 secrets / 环境变量 / config.toml）
 _admin = admin_credentials()
@@ -478,15 +514,16 @@ class Post:
         keyword: str = "",
         tag: str | None = None,
         post_ids: typing.Iterable[int] | None = None,
+        author: str = "",
         start_date: datetime.date | None = None,
         end_date: datetime.date | None = None,
     ):
-        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤查询（SQL 层，供计数与分页共用）。
+        """按关键词 / 标签 / 文章 ID 集合 / 作者 / 发布时间范围过滤查询（SQL 层，供计数与分页共用）。
 
         标签使用 JSONField.contains —— SQLite 上为精确的 JSON 数组元素匹配，
-        避免子串误匹配；关键词为标题或内容的模糊搜索。发布时间按
-        ``created_at``（``YYYY-MM-DD HH:MM:SS`` 字符串，字典序即时间序）的
-        日期区间过滤，起止日期均包含在范围内。
+        避免子串误匹配；关键词为标题或内容的模糊搜索；作者为 userid 或用户名的
+        模糊匹配；发布时间按 ``created_at``（``YYYY-MM-DD HH:MM:SS`` 字符串，
+        字典序即时间序）的日期区间过滤，起止日期均包含在范围内。
         """
         if keyword:
             query = query.where(
@@ -496,6 +533,18 @@ class Post:
             query = query.where(_Post.tags.contains(tag))
         if post_ids is not None:
             query = query.where(_Post.id.in_(post_ids))
+        if author:
+            author_ids = [
+                u.userid
+                for u in _User.select().where(
+                    (_User.userid.contains(author)) | (_User.username.contains(author))
+                )
+            ]
+            if author_ids:
+                query = query.where(_Post.authorid.in_(author_ids))
+            else:
+                # 无匹配作者 → 查询恒为空
+                query = query.where(_Post.id == -1)
         if start_date is not None:
             query = query.where(
                 _Post.created_at >= start_date.strftime("%Y-%m-%d") + " 00:00:00"
@@ -511,12 +560,13 @@ class Post:
         keyword: str = "",
         tag: str | None = None,
         post_ids: typing.Iterable[int] | None = None,
+        author: str = "",
         start_date: datetime.date | None = None,
         end_date: datetime.date | None = None,
     ) -> int:
-        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围统计文章总数（用于分页，与列表口径一致）。"""
+        """按关键词 / 标签 / 文章 ID 集合 / 作者 / 发布时间范围统计文章总数（用于分页，与列表口径一致）。"""
         return Post._apply_filters(
-            _Post.select(), keyword, tag, post_ids, start_date, end_date
+            _Post.select(), keyword, tag, post_ids, author, start_date, end_date
         ).count()
 
     @staticmethod
@@ -534,13 +584,14 @@ class Post:
         keyword: str = "",
         tag: str | None = None,
         post_ids: typing.Iterable[int] | None = None,
+        author: str = "",
         page: int = 1,
         page_size: int = 5,
         start_date: datetime.date | None = None,
         end_date: datetime.date | None = None,
         sort_by: str = "date",
     ) -> list[dict[str, str]]:
-        """按关键词 / 标签 / 文章 ID 集合 / 发布时间范围过滤后分页获取文章。
+        """按关键词 / 标签 / 文章 ID 集合 / 作者 / 发布时间范围过滤后分页获取文章。
 
         ``sort_by`` 支持四种排序：``date``（发布时间倒序，默认）、``views``
         （浏览量降序）、``likes``（点赞量降序）、``bookmarks``（收藏量降序）。
@@ -548,7 +599,7 @@ class Post:
         保证总数分页口径一致。
         """
         query = Post._apply_filters(
-            _Post.select(), keyword, tag, post_ids, start_date, end_date
+            _Post.select(), keyword, tag, post_ids, author, start_date, end_date
         )
 
         if sort_by == "views":
@@ -585,6 +636,23 @@ class Post:
         )
 
     @staticmethod
+    def get_author_stats(authorid: str) -> dict:
+        """统计某作者的文章数、总浏览量、总获赞、总获藏（用于个人主页）。"""
+        posts = list(_Post.select().where(_Post.authorid == authorid).dicts())
+        post_ids = [p["id"] for p in posts]
+        likes = 0
+        bookmarks = 0
+        if post_ids:
+            likes = _Like.select().where(_Like.postid.in_(post_ids)).count()
+            bookmarks = _Bookmark.select().where(_Bookmark.postid.in_(post_ids)).count()
+        return {
+            "post_count": len(posts),
+            "views": sum(p.get("views", 0) for p in posts),
+            "likes": likes,
+            "bookmarks": bookmarks,
+        }
+
+    @staticmethod
     def add_view(postid: int) -> None:
         """文章浏览量 +1。"""
         _Post.update(views=_Post.views + 1).where(_Post.id == postid).execute()
@@ -617,6 +685,7 @@ class Post:
                 comments.append(
                     json.dumps(
                         {
+                            "id": comment["id"],
                             "userid": comment["userid"],
                             "content": comment["content"],
                             "created_at": comment["created_at"],
@@ -852,6 +921,169 @@ class Bookmark:
     def get_bookmarked_post_ids(userid: str) -> list[int]:
         """获取用户收藏的所有文章 ID。"""
         return [b.postid for b in _Bookmark.select().where(_Bookmark.userid == userid)]
+
+
+class Report:
+    """举报：用户可举报文章或评论，管理员在后台受理处理。"""
+
+    @staticmethod
+    def add(
+        reporter_userid: str,
+        *,
+        postid: int | None = None,
+        commentid: int | None = None,
+        target_userid: str = "",
+        content_preview: str = "",
+        reason: str = "",
+    ) -> int | None:
+        """提交举报，返回举报 ID；重复举报（同一人对同一目标且未处理）返回 None。
+
+        参数：
+            reporter_userid: 举报人 userid
+            postid / commentid: 被举报目标（举报文章传 postid，举报评论传 postid+commentid）
+            target_userid: 被举报内容作者 userid（便于后台核对）
+            content_preview: 被举报内容摘要快照
+            reason: 举报理由（必填）
+        """
+        if not reporter_userid:
+            return None
+        reason = (reason or "").strip()
+        if not reason:
+            return None
+        # 重复判断：同一举报人、同一目标、状态为 pending 的举报不重复新建。
+        # 注意：举报帖子（commentid 为空）与举报评论（commentid 非空）是不同的目标，
+        # 不能仅按 postid 判断，否则会互相误判为重复。
+        dup = (_Report.reporter_userid == reporter_userid) & (
+            _Report.status == "pending"
+        )
+        if commentid is not None:
+            dup = dup & (_Report.postid == postid) & (_Report.commentid == commentid)
+        else:
+            dup = dup & (_Report.postid == postid) & (_Report.commentid.is_null())
+        if _Report.get_or_none(dup):
+            return None
+        return _Report.create(
+            postid=postid,
+            commentid=commentid,
+            target_userid=target_userid,
+            reporter_userid=reporter_userid,
+            content_preview=(content_preview or "")[:500],
+            reason=reason,
+            status="pending",
+            created_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ).id
+
+    @staticmethod
+    def get(report_id: int) -> dict | None:
+        """获取单条举报详情。"""
+        return _Report.select().where(_Report.id == report_id).dicts().get_or_none()
+
+    @staticmethod
+    def get_all(status: str | None = None) -> list[dict]:
+        """获取全部举报（可按状态过滤），按时间倒序。"""
+        q = _Report.select().order_by(_Report.id.desc())
+        if status:
+            q = q.where(_Report.status == status)
+        return list(q.dicts())
+
+    @staticmethod
+    def count(status: str | None = None) -> int:
+        """举报总数（可按状态过滤）。"""
+        q = _Report.select()
+        if status:
+            q = q.where(_Report.status == status)
+        return q.count()
+
+    @staticmethod
+    def handle(
+        report_id: int, handled_by: str, action: str, note: str = ""
+    ) -> bool:
+        """处理举报：action 为 handled（已处理）或 dismissed（驳回/误报）。"""
+        if action not in ("handled", "dismissed"):
+            return False
+        updated = (
+            _Report.update(
+                status=action,
+                handled_by=handled_by,
+                handled_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                note=(note or "")[:500],
+            )
+            .where(_Report.id == report_id)
+            .execute()
+        )
+        return updated > 0
+
+
+class Draft:
+    """草稿：用户可保存未完成的文章，稍后在发布页继续编辑。"""
+
+    @staticmethod
+    def save(
+        userid: str,
+        title: str = "",
+        content: str = "",
+        tags: typing.List[str] = None,
+        attpassword: str = "",
+        draft_id: int | None = None,
+    ) -> int | None:
+        """保存草稿；传入 draft_id 表示更新已有草稿，否则新建。"""
+        if not userid:
+            return None
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if draft_id:
+            d = _Draft.get_or_none((_Draft.id == draft_id) & (_Draft.userid == userid))
+            if d:
+                d.title = title
+                d.content = content
+                d.tags = tags or []
+                d.attpassword = attpassword
+                d.updated_at = now
+                d.save()
+                return d.id
+        return _Draft.create(
+            userid=userid,
+            title=title,
+            content=content,
+            tags=tags or [],
+            attpassword=attpassword,
+            created_at=now,
+            updated_at=now,
+        ).id
+
+    @staticmethod
+    def get_drafts(userid: str) -> list[dict]:
+        """获取某用户的全部草稿（按更新时间倒序）。"""
+        return list(
+            _Draft.select()
+            .where(_Draft.userid == userid)
+            .order_by(_Draft.id.desc())
+            .dicts()
+        )
+
+    @staticmethod
+    def get_draft(userid: str, draft_id: int) -> dict | None:
+        """获取单条草稿（仅限本人）。"""
+        return (
+            _Draft.select()
+            .where((_Draft.id == draft_id) & (_Draft.userid == userid))
+            .dicts()
+            .get_or_none()
+        )
+
+    @staticmethod
+    def delete(userid: str, draft_id: int) -> bool:
+        """删除草稿（仅限本人）。"""
+        return (
+            _Draft.delete()
+            .where((_Draft.id == draft_id) & (_Draft.userid == userid))
+            .execute()
+            > 0
+        )
+
+    @staticmethod
+    def count(userid: str) -> int:
+        """某用户的草稿数。"""
+        return _Draft.select().where(_Draft.userid == userid).count()
 
 
 def save_avatar(uploaded_file) -> dict:
@@ -1223,7 +1455,7 @@ def bootstrap_announcements() -> None:
             ]
         ),
         attachments=[],
-        tags=["迎新", "校园生活", "社区规范"],
+        tags=announcement_tags,
     )
 
 

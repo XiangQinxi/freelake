@@ -1,12 +1,19 @@
-streamlit
-playhouse
-peewee
-Pillow
-pandas
-openai
-toml
+# FreeLake 依赖清单
+# 版本约束说明：以开发者环境实测版本为下限（>=），既保证所用 API 可用，
+# 又允许 Streamlit Cloud 等环境解析兼容版本；如需完全可复现可改为 ==。
 
-streamlit-file-browser
-streamlit-extras
-streamlit-cookies-manager
-streamlit-video-background
+# —— 核心框架 ——
+streamlit>=1.61
+peewee>=4.3
+playhouse>=0.1
+Pillow>=12.3
+toml>=0.10
+
+# —— 数据与图表 ——
+pandas>=3.0
+
+# —— 业务扩展 ——
+openai>=3.1
+streamlit-cookies-manager>=0.2
+streamlit-file-browser>=3.2
+streamlit-video-background>=0.1

@@ -16,6 +16,7 @@ import base64
 import datetime
 import io
 import json
+import re
 from zipfile import ZipFile
 
 import streamlit as st
@@ -26,6 +27,7 @@ from api import (
     Bookmark,
     Like,
     Post,
+    Report,
     User,
     format_size,
     get_avatar_bytes,
@@ -47,6 +49,26 @@ DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
 
 # 主页动态视频背景由 `streamlit_video_background` 扩展包提供（在下方主页视图处调用）。
 # 通过 `pip install -e streamlit-video-background` 已安装，可独立分发。
+
+
+def highlight_keyword(text: str, keyword: str) -> str:
+    """将关键词匹配片段用 Streamlit 彩色文本（:red[...]）高亮；无关键词或空文本则原样返回。"""
+    if not keyword or not text:
+        return text
+    pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+    return pattern.sub(lambda m: f":red[{m.group(0)}]", text)
+
+
+def highlight_mentions(text: str) -> str:
+    """把评论/内容中的 @用户名 渲染为醒目徽章（不做真实用户解析，仅视觉高亮）。"""
+    if not text:
+        return text
+    # 匹配中英文、数字、下划线、连字符组成的 @提及
+    return re.sub(
+        r"@([A-Za-z0-9_\-\u4e00-\u9fa5]+)",
+        r":blue-badge[@\1]",
+        text,
+    )
 
 
 user = User()
@@ -131,6 +153,57 @@ def edit_comment_dialog(post_id, comment_index, current_content):
                 st.error("评论修改失败！")
 
 
+@st.dialog("举报文章")
+def report_post_dialog(post):
+    st.caption(f"举报文章：**{post['title']}**")
+    reason = st.text_area(
+        "举报理由", placeholder="请填写举报原因（必填）", height=120
+    )
+    if st.button("提交举报", type="primary"):
+        reason = reason.strip()
+        if not reason:
+            st.error("请填写举报理由！")
+        else:
+            result = Report.add(
+                state["userid"],
+                postid=int(post["id"]),
+                target_userid=post["authorid"],
+                content_preview=(post["title"] or "")[:200],
+                reason=reason,
+            )
+            if result:
+                st.toast("举报已提交，管理员会尽快处理，感谢反馈！")
+                st.rerun()
+            else:
+                st.warning("你已举报过该文章，管理员正在处理中")
+
+
+@st.dialog("举报评论")
+def report_comment_dialog(post_id, comment):
+    st.caption(f"举报评论：{comment['content'][:60]}")
+    reason = st.text_area(
+        "举报理由", placeholder="请填写举报原因（必填）", height=120
+    )
+    if st.button("提交举报", type="primary"):
+        reason = reason.strip()
+        if not reason:
+            st.error("请填写举报理由！")
+        else:
+            result = Report.add(
+                state["userid"],
+                postid=int(post_id),
+                commentid=int(comment["id"]),
+                target_userid=comment["userid"],
+                content_preview=comment["content"][:200],
+                reason=reason,
+            )
+            if result:
+                st.toast("举报已提交，管理员会尽快处理，感谢反馈！")
+                st.rerun()
+            else:
+                st.warning("你已举报过该评论，管理员正在处理中")
+
+
 # endregion
 
 
@@ -159,11 +232,13 @@ def basic_information(post, _config=None, compact=False):
     )
     col_2.subheader(post["title"])
     if check_by_state():
-        # 更多菜单：作者/管理员可编辑、删除；所有登录用户可点赞、收藏
+        # 更多菜单：作者/管理员可编辑、删除；其他登录用户可举报；所有登录用户可点赞、收藏
         menu_options = []
         if post["authorid"] == state["userid"] or userconfig["role"] == admin:
             menu_options.append(":material/edit: 编辑")
             menu_options.append(":material/delete: 删除")
+        elif userconfig.get("userid") != post["authorid"]:
+            menu_options.append(":material/report: 举报")
         liked = Like.is_liked(post["id"], state["userid"])
         bookmarked = Bookmark.is_bookmarked(post["id"], state["userid"])
         menu_options.append(
@@ -188,6 +263,8 @@ def basic_information(post, _config=None, compact=False):
                 edit_post(post)
             case ":material/delete: 删除":
                 confirm_delete_post(post["id"])
+            case ":material/report: 举报":
+                report_post_dialog(post)
             case (
                 ":material/favorite: 取消点赞"
                 | ":material/favorite_border: 点赞"
@@ -300,24 +377,30 @@ if user_id:
         st.rerun()
     userconfig = user.get_config(user_id)
     if userconfig:
-        st.markdown(f"### :material/person: {userconfig.get('username')}")
-        st.image(get_avatar_bytes(userconfig["avatar"]), width=250)
-        role_name = "管理员" if userconfig.get("role") == admin else "普通用户"
-        st.table(
-            {
-                ":material/key: 用户ID": userconfig.get("userid"),
-                ":material/person: 名称": userconfig.get("username"),
-                ":material/access_time: 注册时间": userconfig.get("created_at"),
-                ":material/info: 自我介绍": userconfig.get("description")
-                or "暂无自我介绍",
-                ":material/shield: 职位": role_name,
-            },
-            border="horizontal",
-            width="content",
-        )
+        # 头像 + 名字横幅
+        col_h, col_i = st.columns([0.24, 0.76], vertical_alignment="center")
+        col_h.image(get_avatar_bytes(userconfig["avatar"]), width=150)
+        with col_i:
+            st.markdown(f"### {userconfig.get('username')}")
+            role_name = "管理员" if userconfig.get("role") == admin else "普通用户"
+            st.caption(
+                f":material/badge: {role_name} · 注册于 {userconfig.get('created_at')}"
+            )
+            st.markdown(
+                userconfig.get("description") or "这个用户很懒，什么也没留下~"
+            )
+        st.divider()
+
+        # 数据统计
+        stats = Post.get_author_stats(user_id)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("发布文章", stats["post_count"], border=True)
+        c2.metric("总浏览", stats["views"], border=True)
+        c3.metric("总获赞", stats["likes"], border=True)
+        c4.metric("总获藏", stats["bookmarks"], border=True)
+        st.divider()
 
         # 该用户发布的文章列表
-        st.divider()
         st.markdown("### :material/article: 发布的文章")
         author_posts = Post.get_by_author(user_id)
         if not author_posts:
@@ -359,7 +442,7 @@ else:
         if post:
             basic_information(post)
 
-            st.markdown(post["content"])
+            st.markdown(highlight_keyword(post["content"], search_keyword or ""))
 
             like_and_bookmarked(post)
 
@@ -478,9 +561,10 @@ else:
             col_3, col_4 = st.columns([0.8, 0.2])
             new_comment = col_3.text_area(
                 "评论",
-                placeholder="良言一句三冬暖，恶语伤人六月寒",
+                placeholder="良言一句三冬暖，恶语伤人六月寒。支持 Markdown，可用 @用户名 提及他人",
                 label_visibility="collapsed",
             )
+            col_3.caption("支持 Markdown 排版 · @用户名 可提及他人")
             if col_4.button(":material/send: 提交评论", type="primary"):
                 if not state.get("userid"):
                     st.warning("请先登录以提交评论！")
@@ -514,20 +598,26 @@ else:
                                 width=40,
                                 link=f"?user_id={comment['userid']}",
                             )
-                            col_b.markdown(f"**{cfg['username']}**")
+                            col_b.markdown(
+                                f":blue-badge[{index + 1}楼] **{cfg['username']}**"
+                            )
                             col_b.caption(comment.get("created_at", ""))
-                            col_b.markdown(comment["content"])
+                            col_b.markdown(highlight_mentions(comment["content"]))
                             if check_by_state():
-                                if (
+                                menu_options = []
+                                can_manage = (
                                     userconfig.get("userid") == comment["userid"]
                                     or userconfig.get("role") == admin
-                                ):
+                                )
+                                if can_manage:
+                                    menu_options.append(":material/edit: 编辑")
+                                    menu_options.append(":material/delete: 删除")
+                                elif userconfig.get("userid") != comment["userid"]:
+                                    menu_options.append(":material/report: 举报")
+                                if menu_options:
                                     action = col_c.menu_button(
                                         "",
-                                        options=[
-                                            ":material/edit: 编辑",
-                                            ":material/delete: 删除",
-                                        ],
+                                        options=menu_options,
                                         icon=":material/more_vert:",
                                         key=f"comment{index}.menu",
                                         type="tertiary",
@@ -543,6 +633,8 @@ else:
                                                 st.rerun()
                                             else:
                                                 st.error("评论删除失败！")
+                                        case ":material/report: 举报":
+                                            report_comment_dialog(post["id"], comment)
         else:
             st.warning("文章不存在或已被删除！")
     # endregion
@@ -609,7 +701,22 @@ else:
                     del params["search_keyword"]
                 st.rerun()
 
+            filter_author = st.text_input(
+                "按作者查找",
+                placeholder="输入作者用户名或用户ID",
+                label_visibility="collapsed",
+                icon=":material/person:",
+                value=params.get("filter_author", ""),
+            )
+            if filter_author != params.get("filter_author", ""):
+                if filter_author:
+                    params["filter_author"] = filter_author
+                else:
+                    del params["filter_author"]
+                st.rerun()
+
             selected_tag = st.pills(":material/filter_alt: 筛选", tags)
+            st.caption(":material/info: 支持组合搜索：关键词 + 作者 + 标签 + 日期范围")
 
             # —— 排序（menu_button：点击展开排序项，选中后按钮文字同步变化）——
             sort_order = st.session_state.get("sort_order", DEFAULT_SORT)
@@ -647,6 +754,7 @@ else:
         total = Post.count_filtered(
             keyword=search_keyword or "",
             tag=selected_tag,
+            author=filter_author or "",
             start_date=date_start,
             end_date=date_end,
         )
@@ -666,6 +774,7 @@ else:
             posts = Post.get_filtered_paginate(
                 keyword=search_keyword or "",
                 tag=selected_tag,
+                author=filter_author or "",
                 page=page,
                 page_size=5,
                 start_date=date_start,
@@ -689,7 +798,9 @@ else:
                         if len(snippet) > 150:
                             snippet = snippet[:150] + "…"
                         if snippet:
-                            st.markdown(snippet)
+                            st.markdown(
+                                highlight_keyword(snippet, search_keyword or "")
+                            )
 
                         with st.container(horizontal_alignment="right"):
                             if st.button(
@@ -712,7 +823,7 @@ else:
                                     else "用户已注销"
                                 )
                                 st.markdown(
-                                    f"**{name}**：{last['content']} （{last['created_at']}）"
+                                    f"**{name}**：{highlight_mentions(last['content'])} （{last['created_at']}）"
                                 )
 
                         attachments = post.get("attachments", [])
