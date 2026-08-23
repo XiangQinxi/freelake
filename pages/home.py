@@ -686,8 +686,8 @@ else:
                             post, author_configs.get(post["authorid"]), compact=True
                         )
                         snippet = (post["content"] or "").strip()
-                        if len(snippet) > 40:
-                            snippet = snippet[:40] + "…"
+                        if len(snippet) > 150:
+                            snippet = snippet[:150] + "…"
                         if snippet:
                             st.markdown(snippet)
 
