@@ -17,6 +17,7 @@ import pytest
 from conftest import FakeUpload
 from PIL import Image
 
+import api
 from api import (Attachment, Bookmark, Draft, Like, Post, Report, User,
                  execute_sql, hash_password, sha256, verify_password)
 
@@ -577,3 +578,191 @@ def test_execute_sql_readonly():
     ):
         with pytest.raises(ValueError):
             execute_sql(bad)
+
+
+# ---------- 安全加固回归（2026-10，docs/project-review.md 第 1 周项） ----------
+
+
+def test_execute_sql_blocks_with_bypass_and_write_pragmas():
+    """P0-1 回归：WITH 前缀写语句与写型 PRAGMA 必须在编译期被拒，且不落地。"""
+    make_user()
+    before_posts = api._Post.select().count()
+    before_version = api._current_user_version()
+    for bad in (
+        "WITH x AS (SELECT 1) DELETE FROM _post",
+        "WITH x AS (SELECT 1) UPDATE _user SET role='ADMIN'",
+        "PRAGMA user_version = 0",
+        "PRAGMA foreign_keys = OFF",
+        "PRAGMA journal_mode = WAL",
+    ):
+        with pytest.raises(ValueError):
+            execute_sql(bad)
+    assert api._Post.select().count() == before_posts
+    assert api._current_user_version() == before_version
+    # 只读 PRAGMA 与 EXPLAIN 仍然可用
+    assert execute_sql("PRAGMA user_version")[0]["user_version"] == before_version
+    assert execute_sql("PRAGMA table_info(_user)")
+    assert execute_sql("EXPLAIN QUERY PLAN SELECT 1")
+
+
+def test_mask_sensitive_rows_hides_credentials():
+    """P0 衍生：后台 SQL 结果展示前，敏感列必须变成 ***。"""
+    row = {
+        "userid": "alice",
+        "password": "pbkdf2$200000$aa$bb",
+        "secret_key_hash": "deadbeef",
+        "secret_key_expires_at": "2026-11-01 00:00:00",
+        "attpassword": "cafebabe",
+        "role": "USER",
+    }
+    masked = api.mask_sensitive_rows([row])[0]
+    assert masked["userid"] == "alice" and masked["role"] == "USER"
+    assert masked["password"] == masked["secret_key_hash"] == "***"
+    assert masked["secret_key_expires_at"] == masked["attpassword"] == "***"
+
+
+def test_register_validates_credentials():
+    """W1-6 回归：非法 ID / 弱密码在数据层就被拒绝（不只靠页面）。"""
+    assert user_api.register("ab", "A", "pass1234") is False
+    assert user_api.register("含中文的ID", "A", "pass1234") is False
+    assert user_api.register(uid("ok"), "A", "short1") is False
+    assert user_api.register(uid("ok"), "A", "onlyletters") is False
+    assert user_api.register(uid("ok"), "A", "12345678") is False
+    assert user_api.register(uid("ok"), "", "pass1234") is False
+    assert user_api.register(uid("ok"), "A", "pass1234") is True
+
+
+def test_role_escalation_requires_admin_secret_key():
+    """P0-5 回归：资料接口不能改 role；改角色只走 set_role + 有效密钥。"""
+    victim = make_user()
+    with pytest.raises(TypeError):
+        user_api.modify(victim["userid"], victim["password"], role="ADMIN")
+    assert user_api.get_config(victim["userid"])["role"] == "USER"
+    # 没有 / 错误的密钥都失败
+    assert user_api.set_role(None, victim["userid"], "ADMIN") is False
+    assert user_api.set_role("sk-not-a-real-key", victim["userid"], "ADMIN") is False
+    # 非法角色值也拒绝
+    admin_user = make_user()
+    key = user_api.issue_secret_key(admin_user["userid"], admin_user["password"])
+    assert user_api.set_role(key, victim["userid"], "ROOT") is False
+    # 真实管理员密钥才成功（测试里把它临时提成 ADMIN）
+    assert api._User.update(role="ADMIN").where(
+        api._User.userid == admin_user["userid"]
+    ).execute() == 1
+    assert user_api.set_role(key, victim["userid"], "ADMIN") is True
+    assert user_api.get_config(victim["userid"])["role"] == "ADMIN"
+
+
+def test_secret_key_requires_password_and_expires():
+    """P0-6 回归：密钥必须凭密码签发，库里只存哈希，过期即失效，签发轮换旧密钥。"""
+    u = make_user()
+    assert user_api.issue_secret_key(u["userid"], "wrong-password") is None
+    key = user_api.issue_secret_key(u["userid"], u["password"])
+    assert key and key.startswith("sk-")
+    row = api._User.get(api._User.userid == u["userid"])
+    assert row.secret_key_hash and row.secret_key_hash != key
+    assert row.secret_key_hash == api.sha256(key)
+    assert row.secret_key_expires_at > api.now_str()
+    # 直接拿密钥比对必须能认出来
+    assert user_api.check_admin(key) in (True, False)  # 非管理员 → False
+    # 过期
+    api._User.update(secret_key_expires_at="2000-01-01 00:00:00").where(
+        api._User.userid == u["userid"]
+    ).execute()
+    assert user_api.check_admin(key) is False
+    # 重新签发后旧密钥失效
+    key2 = user_api.issue_secret_key(u["userid"], u["password"])
+    assert key2 and key2 != key
+    assert user_api.check_admin(key) is False
+
+
+def test_avatar_must_be_whitelisted_filename():
+    """P0-4 回归：avatar 只接受默认头像或 avatars/ 下真实 <uuid>.jpg。"""
+    u = make_user()
+    assert api.is_valid_avatar_name("default_avatar.jpeg") is True
+    assert api.is_valid_avatar_name(r"C:\Windows\win.ini") is False
+    assert api.is_valid_avatar_name("../config.toml") is False
+    assert api.is_valid_avatar_name("a" * 32 + ".jpg") is False  # 文件不存在
+    assert user_api.modify(u["userid"], u["password"], avatar=r"C:\Windows\win.ini") is False
+    assert user_api.get_config(u["userid"])["avatar"] == "default_avatar.jpeg"
+    # 读取层面也不再接受绝对路径 / 穿越
+    assert api.get_avatar_bytes(r"C:\Windows\win.ini") == b""
+    assert api.get_avatar_bytes("../config.toml") == b""
+    assert api.get_avatar_bytes("default_avatar.jpeg")  # 默认头像仍可读
+
+
+def test_attachment_rejects_empty_and_oversized():
+    """W1-7 回归：空文件与超限附件在 save 时就抛错，不落盘。"""
+
+    class FakeUpload:
+        def __init__(self, name, data):
+            self.name = name
+            self.type = "application/octet-stream"
+            self.size = len(data)
+            self._data = data
+
+        def getvalue(self):
+            return self._data
+
+    with pytest.raises(ValueError):
+        Attachment.save(FakeUpload("empty.txt", b""))
+    big = b"x" * (api.MAX_ATTACHMENT_BYTES + 1)
+    with pytest.raises(ValueError):
+        Attachment.save(FakeUpload("big.bin", big))
+    meta = Attachment.save(FakeUpload("ok.txt", b"hello"))
+    assert meta["size"] == 5 and meta["saved_name"].endswith(".txt")
+
+
+# ---------- 正确性收口（review P1-8/9/10/11 的剩余项） ----------
+
+
+def test_report_handle_only_pending():
+    """已处理/已驳回的举报不能被二次处理（避免状态被反复改写）。"""
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    rid = Report.add(
+        u2["userid"], postid=pid, target_userid=u["userid"],
+        content_preview="t", reason="x",
+    )
+    assert Report.handle(rid, "admin-1", "handled", "已处理") is True
+    assert Report.handle(rid, "admin-2", "dismissed", "再改一次") is False
+    r = Report.get(rid)
+    assert r["status"] == "handled"
+    assert r["handled_by"] == "admin-1"
+
+
+def test_draft_save_rejects_foreign_draft_id():
+    """用别人的草稿 ID 保存：返回 None 且不新建草稿（原实现会静默新建）。"""
+    owner = make_user()
+    attacker = make_user("atk")
+    did = Draft.save(owner["userid"], "原标题", "原内容", ["趣事分享"], "pw")
+    assert did is not None
+
+    assert (
+        Draft.save(attacker["userid"], "劫持", "劫持", [], "", draft_id=did) is None
+    )
+    # attacker 名下没有新增草稿，owner 的草稿也没被改
+    assert Draft.count(attacker["userid"]) == 0
+    assert Draft.count(owner["userid"]) == 1
+    assert Draft.get_draft(owner["userid"], did)["title"] == "原标题"
+
+    # tags / attpassword 传 None 时保留原值
+    assert Draft.save(owner["userid"], "新标题", "新内容", None, None, draft_id=did) == did
+    d = Draft.get_draft(owner["userid"], did)
+    assert d["title"] == "新标题"
+    assert d["tags"] == ["趣事分享"]
+
+
+def test_post_edit_tags_none_keeps_tags():
+    """Post.edit(tags=None) 表示「不动标签」，[] 才是清空。"""
+    u = make_user()
+    pid = Post.publish(
+        u["userid"], "标题", "内容", [], tags=["趣事分享", "技术分享"]
+    )
+    assert Post.edit(pid, "标题2", "内容2", None) is True
+    got = Post.get(pid)
+    assert got["title"] == "标题2"
+    assert got["tags"] == ["趣事分享", "技术分享"]
+    assert Post.edit(pid, "标题3", "内容3", []) is True
+    assert Post.get(pid)["tags"] == []

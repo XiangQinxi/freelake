@@ -36,15 +36,8 @@ def _clean_db():
     import api
 
     yield
-    for model in (
-        api._User,
-        api._Post,
-        api._Comment,
-        api._Like,
-        api._Bookmark,
-        api._Report,
-        api._Draft,
-    ):
+    # 逆序清理（子表 → 父表），避免外键约束阻止删除
+    for model in reversed(api.ALL_MODELS):
         model.delete().execute()
 
 
