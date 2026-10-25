@@ -1,6 +1,9 @@
 [server]
 runOnSave = true
 enableStaticServing = true
+# 单文件上传上限（MB）。默认 200MB 太大：附件落在 data.db 同目录，
+# 没有配额，容易被一次性大文件占满磁盘。api.MAX_ATTACHMENT_BYTES 与此保持一致。
+maxUploadSize = 20
 
 [theme]
 base = "light"

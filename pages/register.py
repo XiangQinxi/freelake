@@ -30,7 +30,9 @@ with st.form("Register"):
             allowed = False
             st.error("密码长度不能小于8位！")
 
-        if not any(char.isalpha() for char in password):
+        if not any(char.isalpha() for char in password) or not any(
+            char.isdigit() for char in password
+        ):
             allowed = False
             st.error("密码必须包含字母和数字的组合！")
 
@@ -47,10 +49,10 @@ with st.form("Register"):
             if password != password2:
                 st.error("重新输入的密码与原来的密码不一致")
             elif not allowed:
-                pass
+                st.error("密码不符合要求：至少 8 位，且同时包含字母和数字")
             else:
                 if user.register(userid, username, password):  # NOQA
-                    secretkey = User.get_secret_key(userid)
+                    secretkey = User.issue_secret_key(userid, password)
 
                     cookies["userid"] = userid
                     cookies["password"] = password

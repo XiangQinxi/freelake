@@ -30,7 +30,7 @@ with st.form("Login"):
             st.error("密码不能为空")
         else:
             if user.login(userid, password):
-                secretkey = User.get_secret_key(userid)
+                secretkey = User.issue_secret_key(userid, password)
 
                 cookies["userid"] = userid
                 cookies["password"] = password

@@ -16,6 +16,17 @@ import urllib.request
 import streamlit as st
 from openai import OpenAI
 
+from api import User
+
+state = st.session_state
+
+# 页面自己鉴权：导航里隐藏入口不算鉴权，直接访问 URL 时页面脚本仍会被执行；
+# 这个页面还会消耗付费 API 额度，必须挡在门外。
+if not User().is_admin(state.get("userid"), state.get("password")):
+    st.error("需要管理员权限，请先以管理员账号登录。", icon=":material/lock:")
+    st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
+    st.stop()
+
 st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 st.subheader(":material/image: 图片生成")
 st.caption("使用 AI 根据文字描述生成图片，或对上传的图片进行编辑。")

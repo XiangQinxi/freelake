@@ -11,13 +11,16 @@ Streamlit 论坛应用的主入口脚本，负责：
 运行方式：``streamlit run main.py``
 
 安全约定：
-- Cookie 加密密钥优先从环境变量 ``COOKIES_PASSWORD`` 或
-  ``.streamlit/secrets.toml`` 的 ``[cookies]`` 段读取（不要使用默认值）；
+- Cookie 加密密钥必须来自环境变量 ``COOKIES_PASSWORD`` 或
+  ``.streamlit/secrets.toml`` 的 ``[cookies]`` 段。**不再回落公开常量**：
+  未配置时使用进程级随机密钥并显示醒目警告（漏洞关闭，代价是重启后
+  所有人需重新登录）；
 - 登录状态以「userid + 明文密码」形式保存在加密 Cookie 中，由
   ``api2.check_by_state`` 每次直接查库校验。
 """
 
 import os
+import secrets
 
 import streamlit as st
 
@@ -50,13 +53,29 @@ if "userid" not in state:
     state["userid"] = ""
 if "password" not in state:
     state["password"] = ""
+if "secretkey" not in state:
+    # 管理员操作（页面上「用户管理」）会用 state["secretkey"] 调 check_admin；
+    # 缺这个键会在刷新后直接 KeyError，所以即使未登录也要先置空。
+    state["secretkey"] = ""
 
 # ---- 加密 Cookie：持久化登录状态（浏览器端加密存储） ----
+# 安全：绝不使用硬编码/公开的兜底密钥（等同于把解密密钥写进仓库）。
+# 未配置时退化为「进程级随机密钥」——攻击者不可知，因此漏洞关闭；
+# 代价是服务重启（或多进程部署）后所有人需要重新登录，并会看到醒目提示。
+_cookie_password = os.environ.get("COOKIES_PASSWORD") or _secrets_get(
+    "cookies", {}
+).get("password")
+if not _cookie_password:
+    _cookie_password = secrets.token_urlsafe(32)
+    st.warning(
+        "未配置 Cookie 加密密钥（环境变量 `COOKIES_PASSWORD` 或 secrets 的 "
+        "`[cookies] password`）。本次进程已生成**临时随机密钥**："
+        "服务重启或多进程部署后所有用户都需要重新登录，请尽快配置。",
+        icon=":material/key_off:",
+    )
 cookies = EncryptedCookieManager(
     prefix="freelake/",
-    password=os.environ.get("COOKIES_PASSWORD")
-    or _secrets_get("cookies", {}).get("password")
-    or "dev-insecure-fallback-change-me",
+    password=_cookie_password,
 )
 state["cookies"] = cookies
 
@@ -68,6 +87,9 @@ if cookies.ready():
     # 从 Cookie 恢复登录状态（未登录时为空字符串）
     state["userid"] = cookies.get("userid", "")
     state["password"] = cookies.get("password", "")
+    # secretkey 必须一起恢复：页面刷新后 session_state 会清空，而
+    # pages/admin.py 的「修改角色 / 删除用户」用 state["secretkey"] 调 check_admin。
+    state["secretkey"] = cookies.get("secretkey", "")
 else:
     st.info("⏳ 正在加载 Cookies，请稍候...")
 

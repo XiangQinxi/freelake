@@ -19,12 +19,12 @@ import io
 import json
 import re
 from pathlib import Path
-from zipfile import ZipFile
 
 import streamlit as st
 from streamlit_video_background import render_video_background
 
-from api import (Attachment, Bookmark, Like, Post, Report, User, format_size,
+from api import (Attachment, Bookmark, Like, Post, Report, User,
+                 build_attachments_zip, format_size,
                  get_avatar_bytes, save_avatar, sha256)
 from api2 import check_by_state
 from const import admin, tags
@@ -564,17 +564,21 @@ else:
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                     st.caption(":material/attach_file: 附件文件")
 
-                    zip_buffer = io.BytesIO()
-                    with ZipFile(zip_buffer, "w") as zf:
-                        for att in attachments:
-                            data = files.get(att.get("saved_name", ""))
-                            if data:
-                                zf.writestr(att.get("original_name", "download"), data)
+                    # 打包结果按「帖子 + 附件名」缓存，避免每次 rerun 重新压缩
+                    zip_entries = tuple(
+                        (
+                            att.get("saved_name", ""),
+                            att.get("original_name", "download"),
+                        )
+                        for att in attachments
+                        if att.get("saved_name")
+                        and att.get("saved_name") not in missing
+                    )
                     if missing:
                         st.warning(f"有 {len(missing)} 个附件文件已丢失，无法打包")
                     st.download_button(
                         label=":material/folder_zip: 下载所有附件 (ZIP)",
-                        data=zip_buffer.getvalue(),
+                        data=build_attachments_zip(post["id"], zip_entries),
                         file_name=f"{post['title']}-{post['authorid']}.zip",
                         mime="application/zip",
                         key=f"dl_all_{post['id']}",
@@ -892,14 +896,6 @@ else:
                             st.divider()
                             st.caption(":material/attach_file: 附件")
                             attpassword = post.get("attpassword")
-                            files = {
-                                att.get("saved_name"): Attachment.get_file(
-                                    att.get("saved_name")
-                                )
-                                for att in attachments
-                                if att.get("saved_name")
-                            }
-
                             for att in attachments:
                                 col_a, col_b, col_c = st.columns([0.1, 0.6, 0.3])
                                 saved_name = att.get("saved_name", "")

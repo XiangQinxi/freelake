@@ -30,19 +30,56 @@ from api import (ATTACHMENTS_DIR, Post, Report, User, delete_comment_by_id,
                  export_users_json, format_size, get_all_attachments,
                  get_attachment_stats, get_comment_summary,
                  get_orphaned_attachments, get_orphaned_comments,
-                 search_comments, sha256)
+                 mask_sensitive_rows, search_comments, sha256)
 
 st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 
 st.subheader(":material/security: 管理后台")
 state = st.session_state
 
+def _bump_admin_data() -> None:
+    """数据变更后让后台快照失效（版本号参与缓存键）。"""
+    st.session_state["_admin_data_ver"] = (
+        st.session_state.get("_admin_data_ver", 0) + 1
+    )
+
+
+def _refresh() -> None:
+    """刷新前先让快照失效，再 rerun。"""
+    _bump_admin_data()
+    st.rerun()
+
+
+@st.cache_data(ttl="2m", show_spinner=False)
+def _admin_snapshot(version: int):
+    """后台用的一份数据快照（版本号一变就整份重取）。
+
+    后台每次 rerun 都会整表拉取用户/文章/评论，而一次点击往往连着触发
+    好几次 rerun；这里按「管理员操作版本号」缓存，避免重复整表扫描。
+    """
+    del version  # 仅作为缓存键
+    return (
+        Post.get_all(),
+        User.get_all(),
+        get_comment_summary(),
+        get_attachment_stats(),
+    )
+
+
+# 权限校验必须放在页面自己身上：隐藏导航入口（main.py 的导航装配）不是鉴权——
+# 直接访问 URL 或从旧标签页进入时，页面脚本会被单独执行。
+if not User().is_admin(state.get("userid"), state.get("password")):
+    st.error("需要管理员权限，请先以管理员账号登录。", icon=":material/lock:")
+    st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
+    st.stop()
+
 # region 统计概览
 with st.expander("统计概览", expanded=True):
     user = User()
     post = Post()
-    stats = get_attachment_stats()
-    all_comments = get_comment_summary()
+    posts_all, users_all, all_comments, stats = _admin_snapshot(
+        state.get("_admin_data_ver", 0)
+    )
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("用户总数", user.count())
     col2.metric("文章总数", post.count())
@@ -73,9 +110,7 @@ def _daily_counts(records, date_key="created_at"):
 
 
 with st.expander("数据图表", expanded=True):
-    posts_all = Post.get_all()
-    users_all = User.get_all()
-    comments_all = get_comment_summary()
+    comments_all = all_comments
 
     c1, c2 = st.columns(2)
     with c1:
@@ -176,14 +211,15 @@ with st.expander("用户管理", expanded=True):
                 st.warning("请输入目标用户 ID")
             else:
                 try:
-                    if user.modify(
+                    if user.set_role(
+                        state.get("secretkey"),
                         target_uid,
-                        None,
-                        role=new_role,
-                        admin_secret_key=state["secretkey"],
+                        new_role,
+                        admin_userid=state.get("userid"),
+                        admin_password=state.get("password"),
                     ):
                         st.success(f"已修改 {target_uid} 的角色为 {new_role}")
-                        st.rerun()
+                        _refresh()
                     else:
                         st.error("修改失败：密钥错误、用户不存在或登录状态已过期")
                 except Exception as e:
@@ -207,11 +243,15 @@ with st.expander("用户管理", expanded=True):
             if col_x.button("确认删除", type="primary", key="confirm_del_user"):
                 try:
                     if user.delete(
-                        confirm_uid, None, admin_secret_key=state["secretkey"]
+                        confirm_uid,
+                        None,
+                        admin_secret_key=state.get("secretkey"),
+                        admin_userid=state.get("userid"),
+                        admin_password=state.get("password"),
                     ):
                         st.success(f"已删除用户 {confirm_uid}")
                         del st.session_state["del_user_confirm"]
-                        st.rerun()
+                        _refresh()
                     else:
                         st.error(f"用户 {confirm_uid} 不存在")
                         del st.session_state["del_user_confirm"]
@@ -220,7 +260,7 @@ with st.expander("用户管理", expanded=True):
                     del st.session_state["del_user_confirm"]
             if col_y.button("取消", key="cancel_del_user"):
                 del st.session_state["del_user_confirm"]
-                st.rerun()
+                _refresh()
 # endregion
 
 # region 文章管理
@@ -278,7 +318,7 @@ with st.expander("文章管理", expanded=True):
                     if post.delete(int(confirm_pid)):
                         st.success(f"已删除文章 #{confirm_pid}")
                         del st.session_state["del_post_confirm"]
-                        st.rerun()
+                        _refresh()
                     else:
                         st.error(f"文章 #{confirm_pid} 不存在")
                         del st.session_state["del_post_confirm"]
@@ -287,7 +327,7 @@ with st.expander("文章管理", expanded=True):
                     del st.session_state["del_post_confirm"]
             if col_y.button("取消", key="cancel_del_post"):
                 del st.session_state["del_post_confirm"]
-                st.rerun()
+                _refresh()
 
     with st.container(border=True):
         st.caption("评论管理")
@@ -322,7 +362,7 @@ with st.expander("评论管理", expanded=True):
                         if delete_comment_by_id(confirm_cid):
                             st.success(f"评论 #{confirm_cid} 已删除")
                             del st.session_state["del_comment_confirm_id"]
-                            st.rerun()
+                            _refresh()
                         else:
                             st.error(f"评论 #{confirm_cid} 不存在")
                             del st.session_state["del_comment_confirm_id"]
@@ -331,7 +371,7 @@ with st.expander("评论管理", expanded=True):
                         del st.session_state["del_comment_confirm_id"]
                 if col_y.button("取消", key="cancel_del_comment"):
                     del st.session_state["del_comment_confirm_id"]
-                    st.rerun()
+                    _refresh()
 
     with tab2:
         col_a, col_b = st.columns([0.8, 0.2], vertical_alignment="bottom")
@@ -356,7 +396,7 @@ with st.expander("评论管理", expanded=True):
             if orphans:
                 deleted = delete_orphaned_comments()
                 st.success(f"已清理 {deleted} 条孤立评论")
-                st.rerun()
+                _refresh()
             else:
                 st.info("没有需要清理的孤立评论")
         if orphans:
@@ -405,11 +445,11 @@ with st.expander("举报管理", expanded=True):
                     ):
                         Report.handle(r["id"], state["userid"], "handled")
                         st.toast("已标记为处理")
-                        st.rerun()
+                        _refresh()
                     if col_b.button("驳回", key=f"rep_no_{r['id']}"):
                         Report.handle(r["id"], state["userid"], "dismissed")
                         st.toast("已驳回该举报")
-                        st.rerun()
+                        _refresh()
                     if is_post:
                         if col_c.button("删除文章", key=f"rep_delpost_{r['id']}"):
                             Post.delete(r["postid"])  # NOQA
@@ -417,7 +457,7 @@ with st.expander("举报管理", expanded=True):
                                 r["id"], state["userid"], "handled", "已删除文章"
                             )
                             st.toast("已删除文章并标记处理")
-                            st.rerun()
+                            _refresh()
                     elif r.get("commentid"):
                         if col_c.button("删除评论", key=f"rep_delcomment_{r['id']}"):
                             delete_comment_by_id(r["commentid"])
@@ -425,7 +465,7 @@ with st.expander("举报管理", expanded=True):
                                 r["id"], state["userid"], "handled", "已删除评论"
                             )
                             st.toast("已删除评论并标记处理")
-                            st.rerun()
+                            _refresh()
                 else:
                     st.caption(
                         f"处理结果：{status_map[r['status']]} · "
@@ -449,7 +489,7 @@ with st.expander("附件管理", expanded=True):
         if orphans:
             deleted = delete_orphaned_attachments()
             st.success(f"已清理 {deleted} 个孤立附件")
-            st.rerun()
+            _refresh()
         else:
             st.info("没有需要清理的孤立附件")
 
@@ -465,7 +505,7 @@ with st.expander("附件管理", expanded=True):
 # region 系统工具
 with st.expander("系统工具", expanded=False):
     st.warning(
-        "⚠️ 仅支持只读 SQL 查询（SELECT / WITH / EXPLAIN / PRAGMA），写操作已被拦截！"
+        "⚠️ 仅支持只读查询：SELECT / WITH / EXPLAIN / PRAGMA。写入在 SQLite 编译期就被拒绝（authorizer），结果里的 password / secret_key* / attpassword 会自动脱敏。"
     )
     col1, col2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
     query = col1.text_input("SQL 查询语句", placeholder="例如：SELECT * FROM _user")
@@ -473,7 +513,8 @@ with st.expander("系统工具", expanded=False):
         if query:
             try:
                 result = execute_sql(query)
-                st.write(result)
+                st.write(mask_sensitive_rows(result))
+                st.caption("敏感列（password / secret_key* / attpassword）已脱敏显示。")
             except Exception as e:
                 st.error(f"查询执行失败：{e}")
         else:

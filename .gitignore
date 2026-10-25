@@ -2,14 +2,22 @@
 .agents
 .mnemon
 .idea
+.ruff_cache
+.venv
+venv
+
 .streamlit/secrets.toml
 __pycache__
 .pytest_cache
 
 attachments/
 avatars/
+logs/
 
 data.db
+data.db.legacy-*
+
+/*.mp4
 
 demo.py
 demo2.py
