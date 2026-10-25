@@ -1,0 +1,628 @@
+{
+  "schema_version": "after",
+  "scale": 1,
+  "generated_at": "2026-10-25T13:14:07+08:00",
+  "dataset": {
+    "data_dir": "C:\\Users\\Xiang\\PycharmProjects\\freelake\\bench\\.benchdata",
+    "seed": 20260101,
+    "counts": {
+      "users": 500,
+      "posts": 3000,
+      "tags": 18,
+      "post_tags": 6006,
+      "comments": 20000,
+      "likes": 15000,
+      "bookmarks": 10000,
+      "reports": 2000
+    },
+    "fixtures": {
+      "hot_post_id": 1501,
+      "hot_post_comment_count": 100,
+      "heavy_author": "u0001",
+      "heavy_author_post_count": 120,
+      "bookmark_user": "u0001",
+      "bookmark_user_count": 143,
+      "tag": "技术分享",
+      "tag_post_count": 367,
+      "date_range": {
+        "start": "2026-03-01",
+        "end": "2026-03-31"
+      },
+      "date_range_post_count": 306
+    }
+  },
+  "environment": {
+    "python": "3.13.5",
+    "peewee": "4.3.0",
+    "sqlite": "3.49.1",
+    "platform": "Windows-11-10.0.26340-SP0",
+    "cpu_count": 16
+  },
+  "method": {
+    "warmup": 1,
+    "repeat": 5,
+    "statistic": "median",
+    "p95": "nearest-rank",
+    "page_size": 10,
+    "note": "只通过 api.py 公共函数测量；EXPLAIN QUERY PLAN 为唯一 raw SQL"
+  },
+  "results": [
+    {
+      "name": "home_first_page",
+      "median_ms": 1.862,
+      "p95_ms": 2.59,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.124,
+      "max_ms": 2.59,
+      "samples_ms": [
+        1.938,
+        2.59,
+        1.862,
+        1.124,
+        1.206
+      ],
+      "note": "Post.get_filtered_paginate(page=1, page_size=10)，无筛选/按日期"
+    },
+    {
+      "name": "sort_date",
+      "median_ms": 1.408,
+      "p95_ms": 2.269,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.309,
+      "max_ms": 2.269,
+      "samples_ms": [
+        1.7,
+        2.269,
+        1.309,
+        1.392,
+        1.408
+      ],
+      "note": "sort_by=date"
+    },
+    {
+      "name": "sort_views",
+      "median_ms": 1.672,
+      "p95_ms": 2.007,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.462,
+      "max_ms": 2.007,
+      "samples_ms": [
+        1.462,
+        1.804,
+        2.007,
+        1.672,
+        1.56
+      ],
+      "note": "sort_by=views"
+    },
+    {
+      "name": "sort_likes",
+      "median_ms": 1.8,
+      "p95_ms": 2.329,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.758,
+      "max_ms": 2.329,
+      "samples_ms": [
+        1.8,
+        1.758,
+        2.121,
+        2.329,
+        1.796
+      ],
+      "note": "sort_by=likes"
+    },
+    {
+      "name": "sort_bookmarks",
+      "median_ms": 1.486,
+      "p95_ms": 1.725,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.274,
+      "max_ms": 1.725,
+      "samples_ms": [
+        1.725,
+        1.35,
+        1.274,
+        1.486,
+        1.539
+      ],
+      "note": "sort_by=bookmarks"
+    },
+    {
+      "name": "tag_filter_page1",
+      "median_ms": 2.768,
+      "p95_ms": 3.84,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 2.305,
+      "max_ms": 3.84,
+      "samples_ms": [
+        3.84,
+        2.514,
+        2.771,
+        2.768,
+        2.305
+      ],
+      "note": "tag=技术分享"
+    },
+    {
+      "name": "tag_filter_count",
+      "median_ms": 1.062,
+      "p95_ms": 1.09,
+      "rows": 367,
+      "rows_kind": "count",
+      "min_ms": 0.562,
+      "max_ms": 1.09,
+      "samples_ms": [
+        0.562,
+        1.075,
+        1.02,
+        1.062,
+        1.09
+      ],
+      "note": "与上面列表同口径计数（分页总数）"
+    },
+    {
+      "name": "date_range_list_page1",
+      "median_ms": 1.575,
+      "p95_ms": 2.563,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.534,
+      "max_ms": 2.563,
+      "samples_ms": [
+        1.661,
+        1.567,
+        1.575,
+        1.534,
+        2.563
+      ],
+      "note": "2026-03-01 ~ 2026-03-31"
+    },
+    {
+      "name": "date_range_count",
+      "median_ms": 0.477,
+      "p95_ms": 0.624,
+      "rows": 306,
+      "rows_kind": "count",
+      "min_ms": 0.392,
+      "max_ms": 0.624,
+      "samples_ms": [
+        0.583,
+        0.624,
+        0.477,
+        0.394,
+        0.392
+      ],
+      "note": "日期区间计数"
+    },
+    {
+      "name": "detail_hot_post",
+      "median_ms": 2.097,
+      "p95_ms": 2.671,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 1.443,
+      "max_ms": 2.671,
+      "samples_ms": [
+        2.671,
+        1.606,
+        1.443,
+        2.097,
+        2.571
+      ],
+      "note": "post_id=1501"
+    },
+    {
+      "name": "author_posts",
+      "median_ms": 4.651,
+      "p95_ms": 5.628,
+      "rows": 120,
+      "rows_kind": "rows",
+      "min_ms": 3.457,
+      "max_ms": 5.628,
+      "samples_ms": [
+        5.628,
+        4.651,
+        5.311,
+        3.457,
+        4.591
+      ],
+      "note": "author=u0001"
+    },
+    {
+      "name": "author_stats",
+      "median_ms": 0.744,
+      "p95_ms": 0.944,
+      "rows": 120,
+      "rows_kind": "count",
+      "min_ms": 0.597,
+      "max_ms": 0.944,
+      "samples_ms": [
+        0.797,
+        0.944,
+        0.744,
+        0.597,
+        0.627
+      ],
+      "note": "个人主页 4 个指标"
+    },
+    {
+      "name": "bookmarks_ids",
+      "median_ms": 0.778,
+      "p95_ms": 1.084,
+      "rows": 143,
+      "rows_kind": "rows",
+      "min_ms": 0.637,
+      "max_ms": 1.084,
+      "samples_ms": [
+        0.778,
+        0.653,
+        1.084,
+        0.844,
+        0.637
+      ],
+      "note": "user=u0001"
+    },
+    {
+      "name": "bookmarks_posts_100",
+      "median_ms": 5.421,
+      "p95_ms": 5.86,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 3.94,
+      "max_ms": 5.86,
+      "samples_ms": [
+        5.421,
+        4.759,
+        5.818,
+        3.94,
+        5.86
+      ],
+      "note": "pages/bookmarks.py 的实际取数（post_ids + 一次取 100 篇）"
+    },
+    {
+      "name": "bookmarks_page_total",
+      "median_ms": 8.35,
+      "p95_ms": 9.211,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 7.406,
+      "max_ms": 9.211,
+      "samples_ms": [
+        7.406,
+        8.725,
+        8.35,
+        7.679,
+        9.211
+      ],
+      "note": "收藏页整页（ids + 列表 + 作者配置）"
+    },
+    {
+      "name": "admin_user_list",
+      "median_ms": 3.383,
+      "p95_ms": 3.664,
+      "rows": 500,
+      "rows_kind": "rows",
+      "min_ms": 2.059,
+      "max_ms": 3.664,
+      "samples_ms": [
+        2.059,
+        2.432,
+        3.561,
+        3.664,
+        3.383
+      ],
+      "note": "pages/admin.py:77 User.get_all()"
+    },
+    {
+      "name": "admin_report_list",
+      "median_ms": 17.875,
+      "p95_ms": 20.403,
+      "rows": 2000,
+      "rows_kind": "rows",
+      "min_ms": 15.335,
+      "max_ms": 20.403,
+      "samples_ms": [
+        17.875,
+        19.606,
+        15.335,
+        20.403,
+        17.66
+      ],
+      "note": "pages/admin.py:386 Report.get_all(status=...)"
+    },
+    {
+      "name": "admin_report_counts",
+      "median_ms": 0.918,
+      "p95_ms": 1.243,
+      "rows": 2000,
+      "rows_kind": "count",
+      "min_ms": 0.861,
+      "max_ms": 1.243,
+      "samples_ms": [
+        1.243,
+        0.935,
+        0.918,
+        0.9,
+        0.861
+      ],
+      "note": "举报管理顶部三个计数"
+    },
+    {
+      "name": "home_first_screen_total",
+      "median_ms": 2.886,
+      "p95_ms": 3.456,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 2.719,
+      "max_ms": 3.456,
+      "samples_ms": [
+        2.886,
+        3.205,
+        3.456,
+        2.865,
+        2.719
+      ],
+      "note": "首页首屏整屏（列表 + 最新评论 + 作者配置）"
+    },
+    {
+      "name": "tag_filter_screen_total",
+      "median_ms": 4.977,
+      "p95_ms": 5.663,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 3.971,
+      "max_ms": 5.663,
+      "samples_ms": [
+        3.971,
+        4.977,
+        5.051,
+        5.663,
+        4.33
+      ],
+      "note": "标签筛选首屏整屏"
+    }
+  ],
+  "consistency": {
+    "date_range": {
+      "start": "2026-03-01",
+      "end": "2026-03-31"
+    },
+    "count_filtered": 306,
+    "paged_total": 306,
+    "consistent": true
+  },
+  "explain_query_plan": [
+    {
+      "name": "home_first_page（无筛选 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [],
+      "plan": [
+        "SCAN t1 USING INDEX _post_created_at_id"
+      ]
+    },
+    {
+      "name": "tag_filter（标签筛选 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" WHERE (\"t1\".\"id\" IN (SELECT \"t2\".\"post_id\" FROM \"_post_tag\" AS \"t2\" INNER JOIN \"_tag\" AS \"t3\" ON (\"t2\".\"tag_id\" = \"t3\".\"id\") WHERE (\"t3\".\"name\" = ?))) ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [
+        "技术分享"
+      ],
+      "plan": [
+        "SEARCH t1 USING INTEGER PRIMARY KEY (rowid=?)",
+        "LIST SUBQUERY 1",
+        "SEARCH t3 USING COVERING INDEX _tag_name (name=?)",
+        "SEARCH t2 USING COVERING INDEX _posttag_tag_id_post_id (tag_id=?)",
+        "CREATE BLOOM FILTER",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "sort_views（按浏览量 + id 倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" ORDER BY \"t1\".\"views\" DESC, \"t1\".\"id\" DESC",
+      "params": [],
+      "plan": [
+        "SCAN t1 USING INDEX _post_views_id"
+      ]
+    },
+    {
+      "name": "sort_likes（按点赞数 + id 倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" ORDER BY \"t1\".\"like_count\" DESC, \"t1\".\"id\" DESC",
+      "params": [],
+      "plan": [
+        "SCAN t1 USING INDEX _post_like_count_id"
+      ]
+    },
+    {
+      "name": "sort_bookmarks（按收藏数 + id 倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" ORDER BY \"t1\".\"bookmark_count\" DESC, \"t1\".\"id\" DESC",
+      "params": [],
+      "plan": [
+        "SCAN t1 USING INDEX _post_bookmark_count_id"
+      ]
+    },
+    {
+      "name": "date_range（日期区间 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" WHERE ((\"t1\".\"created_at\" >= ?) AND (\"t1\".\"created_at\" <= ?)) ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [
+        "2026-03-01 00:00:00",
+        "2026-03-31 23:59:59"
+      ],
+      "plan": [
+        "SEARCH t1 USING INDEX _post_created_at_id (created_at>? AND created_at<?)"
+      ]
+    },
+    {
+      "name": "author_page（author_id=u0001 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" WHERE (\"t1\".\"author_id\" = ?) ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [
+        "u0001"
+      ],
+      "plan": [
+        "SEARCH t1 USING INDEX _post_author_id_id (author_id=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "bookmarks_in（收藏 post_ids IN + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"author_id\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attpassword\", \"t1\".\"views\", \"t1\".\"like_count\", \"t1\".\"bookmark_count\", \"t1\".\"comment_count\" FROM \"_post\" AS \"t1\" WHERE (\"t1\".\"id\" IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)) ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [
+        1384,
+        799,
+        2356,
+        497,
+        1683,
+        1906,
+        1492,
+        2886,
+        603,
+        2125,
+        39,
+        1716,
+        1430,
+        1189,
+        1693,
+        1780,
+        69,
+        2274,
+        1326,
+        2912,
+        803,
+        743,
+        2414,
+        2523,
+        2894,
+        2434,
+        590,
+        1195,
+        73,
+        2032,
+        1836,
+        2144,
+        677,
+        1896,
+        2580,
+        227,
+        1548,
+        2102,
+        1723,
+        579,
+        614,
+        1853,
+        1511,
+        761,
+        1886,
+        324,
+        1669,
+        1945,
+        101,
+        2732,
+        346,
+        1196,
+        175,
+        2562,
+        2919,
+        1584,
+        2854,
+        2317,
+        883,
+        1286,
+        2294,
+        2235,
+        2108,
+        2247,
+        525,
+        568,
+        2404,
+        1154,
+        558,
+        1192,
+        57,
+        177,
+        2394,
+        1221,
+        1750,
+        1871,
+        2749,
+        1787,
+        1867,
+        2147,
+        1324,
+        1457,
+        2875,
+        1311,
+        1352,
+        564,
+        2648,
+        1019,
+        915,
+        1557,
+        2525,
+        908,
+        744,
+        2245,
+        2466,
+        2016,
+        408,
+        1166,
+        1806,
+        1481,
+        2799,
+        1698,
+        419,
+        399,
+        700,
+        1250,
+        1617,
+        2092,
+        122,
+        418,
+        1976,
+        2984,
+        706,
+        2007,
+        1695,
+        405,
+        834,
+        2928,
+        721,
+        1681,
+        2779,
+        2306,
+        863,
+        2876,
+        2297,
+        1347,
+        816,
+        1089,
+        683,
+        1583,
+        1823,
+        970,
+        898,
+        711,
+        2649,
+        886,
+        2083,
+        361,
+        1553,
+        460,
+        2054,
+        2190,
+        517
+      ],
+      "plan": [
+        "SEARCH t1 USING INTEGER PRIMARY KEY (rowid=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    }
+  ],
+  "reproduce": {
+    "seed": "python bench/seed.py --scale 1 --data-dir bench/.benchdata",
+    "bench": "python bench/bench_queries.py --data-dir bench/.benchdata --schema-version after --out bench/after-refactor.json"
+  }
+}

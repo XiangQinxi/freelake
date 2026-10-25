@@ -1,0 +1,425 @@
+{
+  "schema_version": "before",
+  "scale": 1,
+  "generated_at": "2026-10-25T13:05:49+08:00",
+  "dataset": {
+    "data_dir": "C:\\Users\\Xiang\\PycharmProjects\\freelake\\bench\\.benchdata",
+    "seed": 20260101,
+    "counts": {
+      "users": 500,
+      "posts": 3000,
+      "comments": 20000,
+      "likes": 15000,
+      "bookmarks": 10000,
+      "reports": 2000
+    },
+    "fixtures": {
+      "hot_post_id": 1501,
+      "hot_post_comment_count": 100,
+      "heavy_author": "u0001",
+      "heavy_author_post_count": 120,
+      "bookmark_user": "u0001",
+      "bookmark_user_count": 143,
+      "tag": "技术分享",
+      "tag_post_count": 367,
+      "date_range": {
+        "start": "2026-03-01",
+        "end": "2026-03-31"
+      },
+      "date_range_post_count": 306
+    }
+  },
+  "environment": {
+    "python": "3.13.5",
+    "peewee": "4.3.0",
+    "sqlite": "3.49.1",
+    "platform": "Windows-11-10.0.26340-SP0",
+    "cpu_count": 16
+  },
+  "method": {
+    "warmup": 1,
+    "repeat": 5,
+    "statistic": "median",
+    "p95": "nearest-rank",
+    "page_size": 10,
+    "note": "只通过 api.py 公共函数测量；EXPLAIN QUERY PLAN 为唯一 raw SQL"
+  },
+  "results": [
+    {
+      "name": "home_first_page",
+      "median_ms": 1.39,
+      "p95_ms": 2.705,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.149,
+      "max_ms": 2.705,
+      "samples_ms": [
+        1.645,
+        1.39,
+        1.149,
+        1.302,
+        2.705
+      ],
+      "note": "Post.get_filtered_paginate(page=1, page_size=10)，无筛选/按日期"
+    },
+    {
+      "name": "sort_date",
+      "median_ms": 1.238,
+      "p95_ms": 2.402,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.107,
+      "max_ms": 2.402,
+      "samples_ms": [
+        1.527,
+        1.146,
+        1.107,
+        1.238,
+        2.402
+      ],
+      "note": "sort_by=date"
+    },
+    {
+      "name": "sort_views",
+      "median_ms": 1.773,
+      "p95_ms": 2.397,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.336,
+      "max_ms": 2.397,
+      "samples_ms": [
+        2.23,
+        1.771,
+        1.336,
+        2.397,
+        1.773
+      ],
+      "note": "sort_by=views"
+    },
+    {
+      "name": "sort_likes",
+      "median_ms": 69.642,
+      "p95_ms": 76.658,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 68.561,
+      "max_ms": 76.658,
+      "samples_ms": [
+        68.877,
+        68.561,
+        76.658,
+        69.642,
+        72.961
+      ],
+      "note": "sort_by=likes"
+    },
+    {
+      "name": "sort_bookmarks",
+      "median_ms": 71.285,
+      "p95_ms": 79.11,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 64.005,
+      "max_ms": 79.11,
+      "samples_ms": [
+        64.005,
+        74.195,
+        71.285,
+        79.11,
+        71.07
+      ],
+      "note": "sort_by=bookmarks"
+    },
+    {
+      "name": "tag_filter_page1",
+      "median_ms": 18.753,
+      "p95_ms": 23.272,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 16.921,
+      "max_ms": 23.272,
+      "samples_ms": [
+        23.272,
+        18.753,
+        16.921,
+        18.232,
+        19.615
+      ],
+      "note": "tag=技术分享"
+    },
+    {
+      "name": "tag_filter_count",
+      "median_ms": 19.013,
+      "p95_ms": 20.155,
+      "rows": 367,
+      "rows_kind": "count",
+      "min_ms": 17.493,
+      "max_ms": 20.155,
+      "samples_ms": [
+        19.893,
+        17.493,
+        18.797,
+        19.013,
+        20.155
+      ],
+      "note": "与上面列表同口径计数（分页总数）"
+    },
+    {
+      "name": "date_range_list_page1",
+      "median_ms": 2.597,
+      "p95_ms": 4.151,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 1.858,
+      "max_ms": 4.151,
+      "samples_ms": [
+        4.151,
+        2.843,
+        2.597,
+        2.085,
+        1.858
+      ],
+      "note": "2026-03-01 ~ 2026-03-31"
+    },
+    {
+      "name": "date_range_count",
+      "median_ms": 1.423,
+      "p95_ms": 2.486,
+      "rows": 306,
+      "rows_kind": "count",
+      "min_ms": 0.804,
+      "max_ms": 2.486,
+      "samples_ms": [
+        2.486,
+        1.5,
+        1.423,
+        0.804,
+        1.082
+      ],
+      "note": "日期区间计数"
+    },
+    {
+      "name": "detail_hot_post",
+      "median_ms": 2.201,
+      "p95_ms": 3.012,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 1.451,
+      "max_ms": 3.012,
+      "samples_ms": [
+        2.201,
+        2.059,
+        3.012,
+        2.638,
+        1.451
+      ],
+      "note": "post_id=1501"
+    },
+    {
+      "name": "author_posts",
+      "median_ms": 3.762,
+      "p95_ms": 4.339,
+      "rows": 120,
+      "rows_kind": "rows",
+      "min_ms": 3.173,
+      "max_ms": 4.339,
+      "samples_ms": [
+        4.297,
+        3.762,
+        3.173,
+        4.339,
+        3.52
+      ],
+      "note": "author=u0001"
+    },
+    {
+      "name": "author_stats",
+      "median_ms": 12.09,
+      "p95_ms": 15.327,
+      "rows": 120,
+      "rows_kind": "count",
+      "min_ms": 11.614,
+      "max_ms": 15.327,
+      "samples_ms": [
+        15.327,
+        12.09,
+        11.614,
+        14.54,
+        11.653
+      ],
+      "note": "个人主页 4 个指标"
+    },
+    {
+      "name": "bookmarks_ids",
+      "median_ms": 1.75,
+      "p95_ms": 2.102,
+      "rows": 143,
+      "rows_kind": "rows",
+      "min_ms": 1.702,
+      "max_ms": 2.102,
+      "samples_ms": [
+        1.75,
+        1.702,
+        2.102,
+        1.75,
+        1.758
+      ],
+      "note": "user=u0001"
+    },
+    {
+      "name": "bookmarks_posts_100",
+      "median_ms": 3.759,
+      "p95_ms": 4.435,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 2.288,
+      "max_ms": 4.435,
+      "samples_ms": [
+        4.26,
+        3.759,
+        2.288,
+        4.435,
+        2.964
+      ],
+      "note": "pages/bookmarks.py 的实际取数（post_ids + 一次取 100 篇）"
+    },
+    {
+      "name": "bookmarks_page_total",
+      "median_ms": 8.415,
+      "p95_ms": 10.012,
+      "rows": 100,
+      "rows_kind": "rows",
+      "min_ms": 6.171,
+      "max_ms": 10.012,
+      "samples_ms": [
+        10.012,
+        8.422,
+        6.171,
+        7.664,
+        8.415
+      ],
+      "note": "收藏页整页（ids + 列表 + 作者配置）"
+    },
+    {
+      "name": "admin_user_list",
+      "median_ms": 3.966,
+      "p95_ms": 5.786,
+      "rows": 500,
+      "rows_kind": "rows",
+      "min_ms": 3.334,
+      "max_ms": 5.786,
+      "samples_ms": [
+        5.786,
+        3.334,
+        3.966,
+        4.232,
+        3.476
+      ],
+      "note": "pages/admin.py:77 User.get_all()"
+    },
+    {
+      "name": "admin_report_list",
+      "median_ms": 16.907,
+      "p95_ms": 17.658,
+      "rows": 2000,
+      "rows_kind": "rows",
+      "min_ms": 13.231,
+      "max_ms": 17.658,
+      "samples_ms": [
+        17.278,
+        17.658,
+        13.231,
+        15.407,
+        16.907
+      ],
+      "note": "pages/admin.py:386 Report.get_all(status=...)"
+    },
+    {
+      "name": "admin_report_counts",
+      "median_ms": 1.565,
+      "p95_ms": 1.687,
+      "rows": 2000,
+      "rows_kind": "count",
+      "min_ms": 1.448,
+      "max_ms": 1.687,
+      "samples_ms": [
+        1.597,
+        1.505,
+        1.448,
+        1.687,
+        1.565
+      ],
+      "note": "举报管理顶部三个计数"
+    },
+    {
+      "name": "home_first_screen_total",
+      "median_ms": 8.53,
+      "p95_ms": 9.098,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 7.948,
+      "max_ms": 9.098,
+      "samples_ms": [
+        8.53,
+        8.522,
+        9.098,
+        8.98,
+        7.948
+      ],
+      "note": "首页首屏整屏（列表 + 最新评论 + 作者配置）"
+    },
+    {
+      "name": "tag_filter_screen_total",
+      "median_ms": 26.143,
+      "p95_ms": 29.292,
+      "rows": 10,
+      "rows_kind": "rows",
+      "min_ms": 25.269,
+      "max_ms": 29.292,
+      "samples_ms": [
+        25.364,
+        25.269,
+        26.143,
+        28.093,
+        29.292
+      ],
+      "note": "标签筛选首屏整屏"
+    }
+  ],
+  "consistency": {
+    "date_range": {
+      "start": "2026-03-01",
+      "end": "2026-03-31"
+    },
+    "count_filtered": 306,
+    "paged_total": 306,
+    "consistent": true
+  },
+  "explain_query_plan": [
+    {
+      "name": "tag_filter（标签筛选 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"authorid\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attachments\", \"t1\".\"attpassword\", \"t1\".\"tags\", \"t1\".\"comments\", \"t1\".\"views\" FROM \"_post\" AS \"t1\" WHERE (_pw_json_contains(\"t1\".\"tags\", ?) = ?) ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [
+        "\"\\u6280\\u672f\\u5206\\u4eab\"",
+        1
+      ],
+      "plan": [
+        "SCAN t1",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "name": "home_first_page（无筛选 + 日期倒序）",
+      "sql": "SELECT \"t1\".\"id\", \"t1\".\"authorid\", \"t1\".\"title\", \"t1\".\"content\", \"t1\".\"created_at\", \"t1\".\"attachments\", \"t1\".\"attpassword\", \"t1\".\"tags\", \"t1\".\"comments\", \"t1\".\"views\" FROM \"_post\" AS \"t1\" ORDER BY \"t1\".\"created_at\" DESC, \"t1\".\"id\" DESC",
+      "params": [],
+      "plan": [
+        "SCAN t1",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    }
+  ],
+  "reproduce": {
+    "seed": "python bench/seed.py --scale 1 --data-dir bench/.benchdata",
+    "bench": "python bench/bench_queries.py --data-dir bench/.benchdata --schema-version before --out bench/baseline-current.json"
+  }
+}
