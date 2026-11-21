@@ -42,12 +42,12 @@ git clone https://github.com/XiangQinxi/freelake.git
 cd freelake
 
 # 2. 安装依赖
-pip install -r requirements.txt
+cd v2 && pip install -r requirements.txt
 
 # 3. 创建密钥文件 .streamlit/secrets.toml（参考下方「密钥配置」）
 
 # 4. 启动
-streamlit run main.py
+cd v2 && streamlit run main.py
 ```
 
 ### 部署到 Streamlit Cloud
@@ -81,7 +81,9 @@ api_key = "sk-..."
 
 ```
 freelake/
-├── main.py                  # 入口：会话/Cookie 初始化 + st.navigation 导航
+├── v2/                      # 当前开发目录（重构进行中）
+│   ├── main.py              # 入口：会话/Cookie 初始化 + st.navigation 导航
+│   ├── pages/               # 页面目录（st.navigation 引用）
 ├── api.py                   # 数据层：peewee 模型 + 业务接口 + 密码哈希 + 导出/管理工具
 ├── api2.py                  # 会话辅助层：登录状态判断（依赖 st.session_state）
 ├── const.py                 # 全局常量：文章标签、角色标识
@@ -90,7 +92,7 @@ freelake/
 ├── data.db                  # SQLite 数据库（gitignore）
 ├── attachments/             # 上传的附件文件（gitignore）
 ├── avatars/                 # 用户头像文件（gitignore）
-├── pages/                   # 页面目录（st.navigation 引用）
+
 │   ├── home.py              # 首页：列表/搜索/详情/评论/用户资料与账号设置（?user_id=本人）
 │   ├── publish.py           # 发布文章（含草稿箱）
 │   ├── login.py             # 登录
