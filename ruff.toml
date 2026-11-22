@@ -1,6 +1,7 @@
-# Ruff 配置（只约束 v2/，v1/ 是历史参考代码不参与检查）
+# Ruff 配置：只约束在用的代码（仓库根）。v1/ 与 v2/ 是历史参考快照，不参与检查。
 line-length = 100
 target-version = "py313"
+extend-exclude = ["v1", "v2", ".venv", "venv"]
 
 [lint]
 select = ["E", "F", "W", "I", "B", "UP", "C4", "SIM"]

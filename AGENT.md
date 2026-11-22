@@ -2,17 +2,18 @@
 
 > 本文件是给下一个接手此项目的 AI Agent / 开发者的交接说明。
 > 目标：**读完本文件即可在不破坏现有约定的前提下改代码**。
-> 最后更新：2026-11-22（v2 重构 M1 完成；代码整体在 `v2/`，数据模型已升级为 **v4 / 14 表**，本文路径如无特别说明均相对 `v2/`）
+> 最后更新：2026-11-22（v2 重构 M0–M5 完成；**在用的代码就在仓库根**，数据模型为 **v4 / 14 表**；本文路径均相对仓库根）
 >
-> **重构状态（2026-11-22，M0–M5 全部完成）**：代码在 `v2/`，分层为 `pages/*`（视图）→ `freelake/web/*`（组件/对话框）
-> → `freelake/services/*`（业务）→ `freelake/db/*`（模型/适配/SQL）→ `data.db`；`v2/api.py` 是 **166 行门面**
-> （re-export + 启动装配），页面与 `api2.py` 仍只 `from api import …`。`cd v2 && python -m pytest tests -q` → **78 passed**，
+> **重构状态（2026-11-22，M0–M5 全部完成）**：分层为 `pages/*`（视图）→ `freelake/web/*`（组件/对话框）
+> → `freelake/services/*`（业务）→ `freelake/db/*`（模型/适配/SQL）→ `data.db`；`api.py` 是 **166 行门面**
+> （re-export + 启动装配），页面与 `api2.py` 仍只 `from api import …`。`python -m pytest tests -q` → **78 passed**，
 > `python -m ruff check .` → 全绿。会话只存 Cookie `session_token`（库内是 `sha256`），不再存明文密码。
-> 数据模型细节以 `docs/v2-refactor-plan.md` 的 v4 设计 + `v2/freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
-> 仓库根 `data.db` 已是 v4 结构：旧库自动归档为 `data.db.legacy-<时间戳>`（v2 目录内）。
+> 数据模型细节以 `docs/v2-refactor-plan.md` 的 v4 设计 + `freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
+> 运行时 `data.db` 在仓库根，已是 v4 结构：旧库自动归档为 `data.db.legacy-<时间戳>`。
 
-> **目录布局（2026-11 起）**：`v1/` = 上一代实现（只读参考）；`v2/` = 当前代码与重构工作区；`docs/` = 设计与审查文档（含 `docs/v2-refactor-plan.md`）；`bench/` = 性能基准。
-> 运行与测试都要先 `cd v2`（`data.db`、`config.toml` 等路径按 CWD 解析）。
+> **目录布局（2026-11 起）**：仓库根 = 在用代码；`v2/` = **重构前快照**（取自 `5dbccbd`，只读参考，勿改）；
+> `v1/` = 更早的一代实现（只读参考）；`docs/` = 设计与审查文档；`bench/` = 性能基准。
+> 运行与测试都在**仓库根**执行（`data.db`、`config.toml`、`attachments/` 等按 CWD 解析）。
 
 ---
 
@@ -95,8 +96,11 @@ freelake/
 │   ├── baseline-current.json  # v1 基线 / after-refactor.json：v2 结果
 │   └── README.md              # 用法、方法学、before/after 对照与已知回退
 ├── .streamlit/config.toml     # 主题（黑白极简、明暗双主题）+ server 配置
+├── v2/                        # **重构前快照**（5dbccbd 的代码树，含自己的 api.py/pages/…）——只读参考
 └── v1/                        # 上一代版本（含自己的 api.py/home.py…）——**不要改，也不要 import**
 ```
+
+`v1/` 与 `v2/` 已加入 `ruff.toml` 的 `extend-exclude`，也不要在根目录跑测试时把它们算进来。
 
 被 gitignore 且**不要纳入版本控制**：`.claude/`、`.agents/`、`.idea/`、`secrets.toml`、`__pycache__`、
 `.pytest_cache/`、`attachments/`、`avatars/`、`data.db`、`demo.py`/`demo2.py`/`demo3.py`。

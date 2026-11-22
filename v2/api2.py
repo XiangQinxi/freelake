@@ -14,27 +14,12 @@ FreeLake 会话辅助层（api2.py）
 
 import streamlit as st
 
-from api import User, resolve_session
+from api import User
 
 user = User()
 state = st.session_state
 
 
 def check_by_state() -> bool:
-    """当前会话是否已登录。
-
-    M3 起以 Cookie 里的会话 token 为准（避免每次 rerun 跑 PBKDF2）；
-    只有「本次会话内刚登录、token 还没写回浏览器」时才回退到密码校验。
-    """
-    token = state.get("token", "")
-    if token:
-        info = resolve_session(token)
-        if info:
-            state["userid"] = info["userid"]
-            state["role"] = info["role"]
-            return True
-        state["token"] = ""
-        state["userid"] = ""
-        state["role"] = ""
-        return False
+    """检查会话状态：当前会话是否处于已登录状态。"""
     return user.check(state.get("userid", ""), state.get("password", ""))

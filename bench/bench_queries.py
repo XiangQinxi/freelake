@@ -138,7 +138,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="测量 FreeLake 数据层查询热路径（基准数据集由 bench/seed.py 生成）"
     )
-    parser.add_argument("--data-dir", default=None, help="数据集目录（默认读 bench/.last_data_dir.json）")
+    parser.add_argument(
+        "--data-dir", default=None, help="数据集目录（默认读 bench/.last_data_dir.json）"
+    )
     parser.add_argument(
         "--schema-version",
         default="before",
@@ -310,9 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     runner.run(
         "bookmarks_posts_100",
-        lambda: api.Post.get_filtered_paginate(
-            post_ids=bookmark_ids, page=1, page_size=100
-        ),
+        lambda: api.Post.get_filtered_paginate(post_ids=bookmark_ids, page=1, page_size=100),
         note="pages/bookmarks.py 的实际取数（post_ids + 一次取 100 篇）",
     )
 
@@ -415,23 +415,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     # ⑥ 日期区间筛选
     plan_of(
-        api.Post._apply_filters(
-            api._Post.select(), start_date=start, end_date=end
-        ).order_by(*date_order),
+        api.Post._apply_filters(api._Post.select(), start_date=start, end_date=end).order_by(
+            *date_order
+        ),
         "date_range（日期区间 + 日期倒序）",
     )
     # ⑦ 个人主页（Post.get_by_author 的真实 SQL）
     plan_of(
-        api._Post.select()
-        .where(api._Post.author_id == heavy_author)
-        .order_by(*date_order),
+        api._Post.select().where(api._Post.author_id == heavy_author).order_by(*date_order),
         f"author_page（author_id={heavy_author} + 日期倒序）",
     )
     # ⑧ 收藏页的 post_ids IN 查询
     plan_of(
-        api.Post._apply_filters(api._Post.select(), post_ids=bookmark_ids).order_by(
-            *date_order
-        ),
+        api.Post._apply_filters(api._Post.select(), post_ids=bookmark_ids).order_by(*date_order),
         "bookmarks_in（收藏 post_ids IN + 日期倒序）",
     )
 
@@ -487,9 +483,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("-" * 78)
     print(f"最慢项：{slowest['name']} → median {slowest['median_ms']:.2f} ms")

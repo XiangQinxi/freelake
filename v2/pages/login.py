@@ -10,7 +10,7 @@ Cookie 与会话状态，并跳转/刷新。注意：登录后的 rerun 依赖 C
 
 import streamlit as st
 
-from api import User, create_session
+from api import User
 
 st.subheader(":material/login: 登录")
 st.caption("使用用户 ID 与密码登录，即可发布文章、参与评论。")
@@ -31,19 +31,11 @@ with st.form("Login"):
         else:
             if user.login(userid, password):
                 secretkey = User.issue_secret_key(userid, password)
-                token = create_session(userid)
 
-                # Cookie 只放会话 token：密码/管理员密钥一概不落浏览器。
-                if token:
-                    cookies["session_token"] = token
-                    state["token"] = token
-                for legacy_key in ("userid", "password", "secretkey"):
-                    if legacy_key in cookies:
-                        del cookies[legacy_key]
+                cookies["userid"] = userid
+                cookies["password"] = password
+                cookies["secretkey"] = secretkey
                 state["userid"] = userid
-                state["role"] = User().get_config(userid).get("role", "")
-                # 仅本次会话（内存）内保留，供「改密 / 管理员敏感操作」即时使用；
-                # 刷新页面后需要重新输入密码，这是刻意设计。
                 state["password"] = password
                 state["secretkey"] = secretkey
                 st.toast("登录成功！")

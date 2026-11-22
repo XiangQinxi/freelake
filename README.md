@@ -42,12 +42,12 @@ git clone https://github.com/XiangQinxi/freelake.git
 cd freelake
 
 # 2. 安装依赖
-cd v2 && pip install -r requirements.txt
+pip install -r requirements.txt
 
 # 3. 创建密钥文件 .streamlit/secrets.toml（参考下方「密钥配置」）
 
 # 4. 启动
-cd v2 && streamlit run main.py
+streamlit run main.py
 ```
 
 ### 部署到 Streamlit Cloud

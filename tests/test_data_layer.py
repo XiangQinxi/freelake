@@ -1,0 +1,948 @@
+"""
+FreeLake 数据层测试（tests/test_data_layer.py）
+==============================================
+
+覆盖：注册 / 登录 / 密码升级 / 改密校验 / 文章 CRUD（自增 ID）/ 评论
+（增删改 + 时间格式）/ 点赞 / 收藏 / 组合筛选（关键词+标签+收藏）/
+作者文章列表 / 浏览量 / 附件（含目录穿越拦截）/ 只读 SQL 守卫。
+
+所有用例使用唯一 userid，互不干扰；数据库为 conftest 提供的内存库。
+"""
+
+import io
+import re
+import uuid
+
+import pytest
+from conftest import FakeUpload
+from PIL import Image
+
+import api
+from api import (
+    Attachment,
+    Bookmark,
+    Draft,
+    Like,
+    Post,
+    Report,
+    User,
+    execute_sql,
+    hash_password,
+    sha256,
+    verify_password,
+)
+
+user_api = User()
+
+
+def uid(prefix: str = "u") -> str:
+    """生成唯一用户 ID。"""
+    return f"{prefix}{uuid.uuid4().hex[:10]}"
+
+
+def make_user(prefix: str = "u") -> dict:
+    """注册一个用户并返回凭据。"""
+    u = {"userid": uid(prefix), "username": "测试用户", "password": "pass1234"}
+    assert user_api.register(u["userid"], u["username"], u["password"]) is True
+    return u
+
+
+# ---------- 注册 / 登录 / 密码 ----------
+
+
+def test_register_and_login():
+    u = make_user()
+    assert user_api.exists(u["userid"])
+    assert user_api.login(u["userid"], u["password"]) is True
+    assert user_api.login(u["userid"], "wrongpass") is False
+    assert user_api.login(u["userid"], None) is False
+
+
+def test_register_duplicate_fails():
+    u = make_user()
+    assert user_api.register(u["userid"], "另一个", "pass1234") is False
+
+
+def test_old_sha256_password_auto_upgrade():
+    """旧版 sha256 密码登录后自动升级为 PBKDF2。"""
+    from api import _User
+
+    userid = uid("legacy")
+    _User.create(
+        userid=userid,
+        username="旧用户",
+        password_hash=sha256("legacy123"),
+        role="USER",
+        created_at="2026-01-01 00:00:00",
+        updated_at="2026-01-01 00:00:00",
+    )
+    assert user_api.login(userid, "legacy123") is True
+    stored = _User.get(_User.userid == userid).password_hash
+    assert stored.startswith("pbkdf2$")
+    assert verify_password("legacy123", stored) is True
+
+
+def test_hash_verify_roundtrip():
+    h = hash_password("s3cret")
+    assert h.startswith("pbkdf2$")
+    assert verify_password("s3cret", h) is True
+    assert verify_password("wrong", h) is False
+    # 兼容旧 sha256 格式
+    assert verify_password("abc", sha256("abc")) is True
+
+
+# ---------- 改密（B1） ----------
+
+
+def test_change_password_requires_original():
+    """B1 回归：原密码错误时 modify 必须拒绝，且密码不被改动。"""
+    u = make_user()
+    assert user_api.check(u["userid"], u["password"]) is True
+    assert user_api.check(u["userid"], "wrong-original") is False
+    # 原密码错误 → 拒绝，密码保持原样
+    assert (
+        user_api.modify(u["userid"], password="wrong-original", new_password="newpass123") is False
+    )
+    assert user_api.login(u["userid"], u["password"]) is True
+    assert user_api.login(u["userid"], "newpass123") is False
+    # 原密码正确 → 允许
+    assert user_api.modify(u["userid"], password=u["password"], new_password="newpass123") is True
+    assert user_api.login(u["userid"], "newpass123") is True
+
+
+# ---------- 文章 / 评论（B5 / B6 / B3 / F6） ----------
+
+
+def test_post_publish_auto_increment_id():
+    """B5 回归：ID 由数据库自增，连续发布不会重复。"""
+    u = make_user()
+    id1 = Post.publish(u["userid"], "标题一", "内容一", [])
+    id2 = Post.publish(u["userid"], "标题二", "内容二", [])
+    assert isinstance(id1, int) and isinstance(id2, int)
+    assert id1 != id2
+    p1 = Post.get(id1)
+    assert p1["title"] == "标题一"
+    assert p1["views"] == 0
+
+
+def test_post_edit_and_delete():
+    u = make_user()
+    pid = Post.publish(u["userid"], "原标题", "原内容", [])
+    assert Post.edit(pid, "新标题", "新内容", ["趣事分享"]) is True
+    p = Post.get(pid)
+    assert p["title"] == "新标题"
+    assert p["tags"] == ["趣事分享"]
+    assert Post.delete(pid) is True
+    assert Post.get(pid) is None
+
+
+def test_comment_add_edit_delete():
+    """评论增删改；B6 时间格式统一；B3 编辑按索引定位。"""
+    from api import _Comment
+
+    u = make_user()
+    pid = Post.publish(u["userid"], "有评论", "内容", [])
+    cid = Post.add_comment(pid, u["userid"], "第一条评论")
+    assert cid is not None
+    p = Post.get(pid)
+    assert len(p["comments"]) == 1
+    assert "第一条评论" in p["comments"][0]
+
+    # B6：评论时间使用与文章一致的 YYYY-MM-DD HH:MM:SS
+    row = _Comment.get(_Comment.id == cid)
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", row.created_at)
+
+    # B3：编辑评论
+    assert Post.edit_comment(pid, 0, "修改后的评论") is True
+    assert "修改后的评论" in Post.get(pid)["comments"][0]
+    assert Post.edit_comment(pid, 99, "越界索引") is False
+
+    # 按索引删除评论
+    assert Post.delete_comment(pid, 0) is True
+    assert Post.get(pid)["comments"] == []
+
+
+def test_like_and_bookmark_toggle():
+    u = make_user()
+    pid = Post.publish(u["userid"], "互动", "内容", [])
+    # 点赞
+    assert Like.toggle(pid, u["userid"]) is True
+    assert Like.is_liked(pid, u["userid"]) is True
+    assert Like.count(pid) == 1
+    assert Like.toggle(pid, u["userid"]) is False
+    assert Like.count(pid) == 0
+    # 收藏
+    assert Bookmark.toggle(pid, u["userid"]) is True
+    assert Bookmark.is_bookmarked(pid, u["userid"]) is True
+    assert Bookmark.count(pid) == 1
+    assert Bookmark.toggle(pid, u["userid"]) is False
+    assert Bookmark.count(pid) == 0
+
+
+def test_views_increment():
+    """F6：浏览量累加。"""
+    u = make_user()
+    pid = Post.publish(u["userid"], "浏览量", "内容", [])
+    assert Post.get(pid)["views"] == 0
+    Post.add_view(pid)
+    Post.add_view(pid)
+    assert Post.get(pid)["views"] == 2
+
+
+# ---------- 组合筛选（B2 / F3 / F4） ----------
+
+
+def test_count_filtered_and_paginate_consistent():
+    """B2 回归：关键词/标签/收藏在 SQL 层过滤，计数与列表口径一致。"""
+    a = make_user("a")
+    b = make_user("b")
+    p1 = Post.publish(a["userid"], "趣事：今天天气好", "内容A", [], tags=["趣事分享"])
+    p2 = Post.publish(a["userid"], "寻物启事", "内容B", [], tags=["寻物招领"])
+    p3 = Post.publish(b["userid"], "社团招新", "内容C", [], tags=["社团公告"])
+    p4 = Post.publish(b["userid"], "趣事：食堂新品", "内容D", [], tags=["趣事分享"])
+
+    # 全量
+    assert Post.count_filtered() == 4
+    assert len(Post.get_filtered_paginate(page=1, page_size=10)) == 4
+
+    # 关键词（标题/内容）
+    assert Post.count_filtered(keyword="天气") == 1
+    assert Post.get_filtered_paginate(keyword="天气")[0]["id"] == p1
+
+    # 标签（B2：SQL 层精确匹配，分页总数与列表一致）
+    assert Post.count_filtered(tag="趣事分享") == 2
+    assert {p["id"] for p in Post.get_filtered_paginate(tag="趣事分享")} == {p1, p4}
+    assert Post.count_filtered(tag="寻物招领") == 1
+    assert Post.get_filtered_paginate(tag="寻物招领")[0]["id"] == p2
+    assert Post.count_filtered(tag="不存在的标签") == 0
+
+    # 收藏（F4）
+    Bookmark.toggle(p3, a["userid"])
+    Bookmark.toggle(p4, a["userid"])
+    bm_ids = Bookmark.get_bookmarked_post_ids(a["userid"])
+    assert Post.count_filtered(post_ids=bm_ids) == 2
+    assert {p["id"] for p in Post.get_filtered_paginate(post_ids=bm_ids)} == {p3, p4}
+
+    # 组合：收藏 + 标签
+    assert Post.count_filtered(tag="趣事分享", post_ids=bm_ids) == 1
+    assert Post.get_filtered_paginate(tag="趣事分享", post_ids=bm_ids)[0]["id"] == p4
+
+    # 分页与总数一致：第 2 页为空数据量推算正确
+    assert len(Post.get_filtered_paginate(tag="趣事分享", page=1, page_size=1)) == 1
+    assert len(Post.get_filtered_paginate(tag="趣事分享", page=2, page_size=1)) == 1
+
+
+def test_count_filtered_by_date_range():
+    """发布时间范围过滤：SQL 层生效，计数与列表口径一致（起止日期均含）。"""
+    import datetime
+
+    import api
+
+    u = make_user()
+    p1 = Post.publish(u["userid"], "一月发布", "内容A", [])
+    p2 = Post.publish(u["userid"], "二月发布", "内容B", [])
+    p3 = Post.publish(u["userid"], "三月发布", "内容C", [])
+
+    # 人为指定 created_at 日期（默认均为当前时间）
+    for pid, ts in {
+        p1: "2024-01-15 10:00:00",
+        p2: "2024-02-20 10:00:00",
+        p3: "2024-03-10 10:00:00",
+    }.items():
+        api._Post.update(created_at=ts).where(api._Post.id == pid).execute()
+
+    # 起止日期均含：2 月 1 日 ~ 3 月 31 日 → p2 / p3
+    start = datetime.date(2024, 2, 1)
+    end = datetime.date(2024, 3, 31)
+    assert Post.count_filtered(start_date=start, end_date=end) == 2
+    ids = {p["id"] for p in Post.get_filtered_paginate(start_date=start, end_date=end)}
+    assert ids == {p2, p3}
+
+    # 只看起始日期（>= start）
+    assert Post.count_filtered(start_date=start) == 2
+
+    # 只看结束日期（<= end）
+    assert Post.count_filtered(end_date=datetime.date(2024, 1, 31)) == 1
+
+    # 区间不命中
+    assert Post.count_filtered(start_date=datetime.date(2025, 1, 1)) == 0
+
+
+def test_get_filtered_paginate_sort():
+    """排序：按日期 / 浏览量 / 点赞量 / 收藏量降序。"""
+    import api
+
+    a = make_user("a")
+    b = make_user("b")
+    p1 = Post.publish(a["userid"], "文章一", "内容", [])
+    p2 = Post.publish(b["userid"], "文章二", "内容", [])
+    p3 = Post.publish(a["userid"], "文章三", "内容", [])
+
+    # 浏览量
+    api._Post.update(views=10).where(api._Post.id == p1).execute()
+    api._Post.update(views=30).where(api._Post.id == p2).execute()
+    api._Post.update(views=20).where(api._Post.id == p3).execute()
+    views_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="views", page_size=10)]
+    assert views_sorted == [p2, p3, p1]
+
+    # 日期（默认）：最新在前
+    date_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="date", page_size=10)]
+    assert date_sorted == sorted([p1, p2, p3], reverse=True)
+
+    # 点赞量：p3=2 > p2=1 > p1=0
+    Like.toggle(p2, a["userid"])
+    Like.toggle(p3, a["userid"])
+    Like.toggle(p3, b["userid"])
+    likes_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="likes", page_size=10)]
+    assert likes_sorted == [p3, p2, p1]
+
+    # 收藏量：p1=1 排在其余（0）之前
+    Bookmark.toggle(p1, a["userid"])
+    bookmarks_sorted = [
+        p["id"] for p in Post.get_filtered_paginate(sort_by="bookmarks", page_size=10)
+    ]
+    assert bookmarks_sorted[0] == p1
+
+
+def test_get_by_author():
+    """F3：个人主页文章列表。"""
+    u = make_user()
+    ids = [Post.publish(u["userid"], f"文章{i}", "内容", []) for i in range(3)]
+    Post.publish("someoneelse", "别人的", "内容", [])
+    got = Post.get_by_author(u["userid"])
+    assert len(got) == 3
+    assert all(p["authorid"] == u["userid"] for p in got)
+    assert {p["id"] for p in got} == set(ids)
+    # 倒序（最新在前）
+    assert got[0]["id"] > got[-1]["id"]
+
+
+# ---------- 附件（S2） ----------
+
+
+def test_attachment_save_get_and_traversal_blocked(tmp_dirs):
+    data = b"hello attachment"
+    meta = Attachment.save(FakeUpload("a.txt", data, "text/plain"))
+    # 保存名应为 uuid 生成（不是原始文件名）
+    assert re.fullmatch(r"[0-9a-f]{32}\.txt", meta["saved_name"])
+    assert meta["saved_name"] != "a.txt"
+    assert Attachment.get_file(meta["saved_name"]) == data
+    # S2：目录穿越被拦截（basename 后落到附件目录内，找不到返回空）
+    assert Attachment.get_file("../../.streamlit/secrets.toml") == b""
+    assert Attachment.get_file("../data.db") == b""
+
+
+def test_attachment_thumbnail(tmp_dirs):
+    # 生成一张 400x300 PNG
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), "red").save(buf, "PNG")
+    meta = Attachment.save(FakeUpload("pic.png", buf.getvalue(), "image/png"))
+    thumb = Attachment.get_thumbnail_bytes(meta["saved_name"], max_width=100)
+    assert thumb.startswith(b"\xff\xd8")  # JPEG
+    assert thumb != buf.getvalue()
+
+
+# ---------- 头像压缩 ----------
+
+
+def test_avatar_compression(tmp_dirs):
+    """高清头像上传后：1:1 裁切、缩小到 512 上限、转 JPEG、体积显著减小。"""
+    from api import MAX_AVATAR_DIM, get_avatar_bytes, save_avatar
+
+    # 生成 2000x3000 的 RGBA 大图（带透明区域），模拟高清 PNG 头像
+    original = Image.new("RGBA", (2000, 3000), (30, 144, 255, 255))
+    for x in range(0, 2000, 10):
+        for y in range(0, 3000, 10):
+            original.putpixel((x, y), (0, 0, 0, 0))
+    buf = io.BytesIO()
+    original.save(buf, "PNG")
+    raw = buf.getvalue()
+
+    meta = save_avatar(FakeUpload("avatar.png", raw, "image/png"))
+    # 压缩后统一为 .jpg，且体积明显小于原始 PNG
+    assert meta["saved_name"].endswith(".jpg")
+    assert meta["type"] == "image/jpeg"
+    assert meta["size"] < len(raw) / 2
+
+    # 读回并校验：JPEG 且边长不超过上限（1:1 裁切后为正方形）
+    data = get_avatar_bytes(meta["saved_name"])
+    assert data.startswith(b"\xff\xd8")
+    img = Image.open(io.BytesIO(data))
+    assert img.width == img.height
+    assert img.width <= MAX_AVATAR_DIM
+
+
+# ---------- 举报（B1） ----------
+
+
+def test_report_add_and_deduplicate():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "被举报", "内容", [])
+    # 首次举报成功
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="被举报",
+        reason="广告",
+    )
+    assert rid is not None
+    # 相同举报人 + 同一目标 + pending → 不重复提交
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="被举报",
+            reason="广告",
+        )
+        is None
+    )
+    # 不同举报人可再次举报
+    assert (
+        Report.add(
+            u["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="被举报",
+            reason="违禁",
+        )
+        is not None
+    )
+    assert Report.count("pending") == 2
+
+
+def test_report_handle_and_status():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="t",
+        reason="x",
+    )
+    assert Report.handle(rid, "admin", "handled", "已删除") is True
+    r = Report.get(rid)
+    assert r["status"] == "handled"
+    assert r["handled_by"] == "admin"
+    # 非法 action 拒绝
+    assert Report.handle(rid, "admin", "weird") is False
+
+
+def test_report_comment():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    cid = Post.add_comment(pid, u["userid"], "评论内容")
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        commentid=cid,
+        target_userid=u["userid"],
+        content_preview="评论内容",
+        reason="辱骂",
+    )
+    assert rid is not None
+    r = Report.get(rid)
+    assert r["commentid"] == cid
+    assert r["postid"] == pid
+
+
+# ---------- 作者筛选 / 作者统计（B4 / B5） ----------
+
+
+def test_count_filtered_by_author():
+    a = make_user("author")
+    b = make_user("writer")
+    p1 = Post.publish(a["userid"], "A 的文章一", "内容", [])
+    p2 = Post.publish(a["userid"], "A 的文章二", "内容", [])
+    p3 = Post.publish(b["userid"], "B 的文章", "内容", [])
+
+    # 按 userid 精确模糊（contains）
+    assert Post.count_filtered(author=a["userid"]) == 2
+    assert Post.count_filtered(author=a["userid"][:5]) == 2
+    # 无匹配作者 → 0
+    assert Post.count_filtered(author="不存在的人") == 0
+    # 与关键词组合
+    assert Post.count_filtered(keyword="文章一", author=a["userid"]) == 1
+    assert {p["id"] for p in Post.get_filtered_paginate(author=a["userid"])} == {p1, p2}
+    # B 的文章不该出现在 A 的筛选结果里
+    assert p3 not in {p["id"] for p in Post.get_filtered_paginate(author=a["userid"])}
+
+
+def test_get_author_stats():
+    import api
+
+    a = make_user("hero")
+    b = make_user("fan")
+    pid = Post.publish(a["userid"], "标题", "内容", [])
+    p2 = Post.publish(a["userid"], "标题二", "内容", [])
+    assert p2 != pid
+    api._Post.update(views=10).where(api._Post.id == pid).execute()
+    Like.toggle(pid, b["userid"])
+    Bookmark.toggle(pid, b["userid"])
+
+    stats = Post.get_author_stats(a["userid"])
+    assert stats["post_count"] == 2
+    assert stats["views"] == 10
+    assert stats["likes"] == 1
+    assert stats["bookmarks"] == 1
+    # 其他用户无文章
+    empty = Post.get_author_stats(b["userid"])
+    assert empty["post_count"] == 0
+
+
+# ---------- 草稿（B6） ----------
+
+
+def test_draft_save_load_delete():
+    u = make_user()
+    did = Draft.save(u["userid"], "草稿标题", "草稿内容", ["趣事分享"], "pw123")
+    assert did is not None
+    assert Draft.count(u["userid"]) == 1
+
+    d = Draft.get_draft(u["userid"], did)
+    assert d["title"] == "草稿标题"
+    assert d["tags"] == ["趣事分享"]
+
+    # 更新已有草稿
+    d2 = Draft.save(u["userid"], "新标题", "新内容", ["技术分享"], "pw456", draft_id=did)
+    assert d2 == did
+    assert Draft.get_draft(u["userid"], did)["title"] == "新标题"
+
+    # 仅本人可读/删
+    other = make_user("other")
+    assert Draft.get_draft(other["userid"], did) is None
+    assert Draft.delete(other["userid"], did) is False
+    assert Draft.delete(u["userid"], did) is True
+    assert Draft.count(u["userid"]) == 0
+
+
+def test_report_post_and_comment_are_distinct():
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    cid = Post.add_comment(pid, u["userid"], "评论")
+    # 举报帖子与举报该帖下的评论是不同目标，互不误判为重复
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            target_userid=u["userid"],
+            content_preview="t",
+            reason="帖子",
+        )
+        is not None
+    )
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            commentid=cid,
+            target_userid=u["userid"],
+            content_preview="评论",
+            reason="评论",
+        )
+        is not None
+    )
+    # 同一评论重复举报 → 去重
+    assert (
+        Report.add(
+            u2["userid"],
+            postid=pid,
+            commentid=cid,
+            target_userid=u["userid"],
+            content_preview="评论",
+            reason="再来",
+        )
+        is None
+    )
+
+
+# ---------- 只读 SQL 守卫（S3） ----------
+
+
+def test_execute_sql_readonly():
+    """S3：只允许 SELECT / WITH / EXPLAIN / PRAGMA，写操作一律拒绝。"""
+    assert execute_sql("SELECT 1 AS x") == [{"x": 1}]
+    # 大小写 / 前后空白 / 分号均可
+    assert execute_sql("  select count(*) as n from users  ;") is not None
+    for bad in (
+        "DELETE FROM users",
+        "UPDATE _user SET role='ADMIN'",
+        "DROP TABLE _user",
+        "INSERT INTO _user (userid) VALUES ('x')",
+        "",
+    ):
+        with pytest.raises(ValueError):
+            execute_sql(bad)
+
+
+# ---------- 安全加固回归（2026-10，docs/project-review.md 第 1 周项） ----------
+
+
+def test_execute_sql_blocks_with_bypass_and_write_pragmas():
+    """P0-1 回归：WITH 前缀写语句与写型 PRAGMA 必须在编译期被拒，且不落地。"""
+    make_user()
+    before_posts = api._Post.select().count()
+    before_version = api._current_user_version()
+    for bad in (
+        "WITH x AS (SELECT 1) DELETE FROM _post",
+        "WITH x AS (SELECT 1) UPDATE _user SET role='ADMIN'",
+        "PRAGMA user_version = 0",
+        "PRAGMA foreign_keys = OFF",
+        "PRAGMA journal_mode = WAL",
+    ):
+        with pytest.raises(ValueError):
+            execute_sql(bad)
+    assert api._Post.select().count() == before_posts
+    assert api._current_user_version() == before_version
+    # 只读 PRAGMA 与 EXPLAIN 仍然可用
+    assert execute_sql("PRAGMA user_version")[0]["user_version"] == before_version
+    assert execute_sql("PRAGMA table_info(users)")
+    assert execute_sql("EXPLAIN QUERY PLAN SELECT 1")
+
+
+def test_mask_sensitive_rows_hides_credentials():
+    """P0 衍生：后台 SQL 结果展示前，敏感列必须变成 ***。"""
+    row = {
+        "userid": "alice",
+        "password": "pbkdf2$200000$aa$bb",
+        "secret_key_hash": "deadbeef",
+        "secret_key_expires_at": "2026-11-01 00:00:00",
+        "attpassword": "cafebabe",
+        "role": "USER",
+    }
+    masked = api.mask_sensitive_rows([row])[0]
+    assert masked["userid"] == "alice" and masked["role"] == "USER"
+    assert masked["password"] == masked["secret_key_hash"] == "***"
+    assert masked["secret_key_expires_at"] == masked["attpassword"] == "***"
+
+
+def test_register_validates_credentials():
+    """W1-6 回归：非法 ID / 弱密码在数据层就被拒绝（不只靠页面）。"""
+    assert user_api.register("ab", "A", "pass1234") is False
+    assert user_api.register("含中文的ID", "A", "pass1234") is False
+    assert user_api.register(uid("ok"), "A", "short1") is False
+    assert user_api.register(uid("ok"), "A", "onlyletters") is False
+    assert user_api.register(uid("ok"), "A", "12345678") is False
+    assert user_api.register(uid("ok"), "", "pass1234") is False
+    assert user_api.register(uid("ok"), "A", "pass1234") is True
+
+
+def test_role_escalation_requires_admin_secret_key():
+    """P0-5 回归：资料接口不能改 role；改角色只走 set_role + 有效密钥。"""
+    victim = make_user()
+    with pytest.raises(TypeError):
+        user_api.modify(victim["userid"], victim["password"], role="ADMIN")
+    assert user_api.get_config(victim["userid"])["role"] == "USER"
+    # 没有 / 错误的密钥都失败
+    assert user_api.set_role(None, victim["userid"], "ADMIN") is False
+    assert user_api.set_role("sk-not-a-real-key", victim["userid"], "ADMIN") is False
+    # 非法角色值也拒绝
+    admin_user = make_user()
+    key = user_api.issue_secret_key(admin_user["userid"], admin_user["password"])
+    assert user_api.set_role(key, victim["userid"], "ROOT") is False
+    # 真实管理员密钥才成功（测试里把它临时提成 ADMIN）
+    assert (
+        api._User.update(role="ADMIN").where(api._User.userid == admin_user["userid"]).execute()
+        == 1
+    )
+    assert user_api.set_role(key, victim["userid"], "ADMIN") is True
+    assert user_api.get_config(victim["userid"])["role"] == "ADMIN"
+
+
+def test_secret_key_requires_password_and_expires():
+    """P0-6 回归：密钥必须凭密码签发，库里只存哈希，过期即失效，签发轮换旧密钥。"""
+    u = make_user()
+    assert user_api.issue_secret_key(u["userid"], "wrong-password") is None
+    key = user_api.issue_secret_key(u["userid"], u["password"])
+    assert key and key.startswith("sk-")
+    row = api._User.get(api._User.userid == u["userid"])
+    assert row.secret_key_hash and row.secret_key_hash != key
+    assert row.secret_key_hash == api.sha256(key)
+    assert row.secret_key_expires_at > api.now_str()
+    # 直接拿密钥比对必须能认出来
+    assert user_api.check_admin(key) in (True, False)  # 非管理员 → False
+    # 过期
+    api._User.update(secret_key_expires_at="2000-01-01 00:00:00").where(
+        api._User.userid == u["userid"]
+    ).execute()
+    assert user_api.check_admin(key) is False
+    # 重新签发后旧密钥失效
+    key2 = user_api.issue_secret_key(u["userid"], u["password"])
+    assert key2 and key2 != key
+    assert user_api.check_admin(key) is False
+
+
+def test_avatar_must_be_whitelisted_filename():
+    """P0-4 回归：avatar 只接受默认头像或 avatars/ 下真实 <uuid>.jpg。"""
+    u = make_user()
+    assert api.is_valid_avatar_name("default_avatar.jpeg") is True
+    assert api.is_valid_avatar_name(r"C:\Windows\win.ini") is False
+    assert api.is_valid_avatar_name("../config.toml") is False
+    assert api.is_valid_avatar_name("a" * 32 + ".jpg") is False  # 文件不存在
+    assert user_api.modify(u["userid"], u["password"], avatar=r"C:\Windows\win.ini") is False
+    assert user_api.get_config(u["userid"])["avatar"] == "default_avatar.jpeg"
+    # 读取层面也不再接受绝对路径 / 穿越
+    assert api.get_avatar_bytes(r"C:\Windows\win.ini") == b""
+    assert api.get_avatar_bytes("../config.toml") == b""
+    assert api.get_avatar_bytes("default_avatar.jpeg")  # 默认头像仍可读
+
+
+def test_attachment_rejects_empty_and_oversized():
+    """W1-7 回归：空文件与超限附件在 save 时就抛错，不落盘。"""
+
+    class FakeUpload:
+        def __init__(self, name, data):
+            self.name = name
+            self.type = "application/octet-stream"
+            self.size = len(data)
+            self._data = data
+
+        def getvalue(self):
+            return self._data
+
+    with pytest.raises(ValueError):
+        Attachment.save(FakeUpload("empty.txt", b""))
+    big = b"x" * (api.MAX_ATTACHMENT_BYTES + 1)
+    with pytest.raises(ValueError):
+        Attachment.save(FakeUpload("big.bin", big))
+    meta = Attachment.save(FakeUpload("ok.txt", b"hello"))
+    assert meta["size"] == 5 and meta["saved_name"].endswith(".txt")
+
+
+# ---------- 正确性收口（review P1-8/9/10/11 的剩余项） ----------
+
+
+def test_report_handle_only_pending():
+    """已处理/已驳回的举报不能被二次处理（避免状态被反复改写）。"""
+    u = make_user()
+    u2 = make_user("r")
+    pid = Post.publish(u["userid"], "t", "c", [])
+    rid = Report.add(
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="t",
+        reason="x",
+    )
+    assert Report.handle(rid, "admin-1", "handled", "已处理") is True
+    assert Report.handle(rid, "admin-2", "dismissed", "再改一次") is False
+    r = Report.get(rid)
+    assert r["status"] == "handled"
+    assert r["handled_by"] == "admin-1"
+
+
+def test_draft_save_rejects_foreign_draft_id():
+    """用别人的草稿 ID 保存：返回 None 且不新建草稿（原实现会静默新建）。"""
+    owner = make_user()
+    attacker = make_user("atk")
+    did = Draft.save(owner["userid"], "原标题", "原内容", ["趣事分享"], "pw")
+    assert did is not None
+
+    assert Draft.save(attacker["userid"], "劫持", "劫持", [], "", draft_id=did) is None
+    # attacker 名下没有新增草稿，owner 的草稿也没被改
+    assert Draft.count(attacker["userid"]) == 0
+    assert Draft.count(owner["userid"]) == 1
+    assert Draft.get_draft(owner["userid"], did)["title"] == "原标题"
+
+    # tags / attpassword 传 None 时保留原值
+    assert Draft.save(owner["userid"], "新标题", "新内容", None, None, draft_id=did) == did
+    d = Draft.get_draft(owner["userid"], did)
+    assert d["title"] == "新标题"
+    assert d["tags"] == ["趣事分享"]
+
+
+def test_post_edit_tags_none_keeps_tags():
+    """Post.edit(tags=None) 表示「不动标签」，[] 才是清空。"""
+    u = make_user()
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=["趣事分享", "技术分享"])
+    assert Post.edit(pid, "标题2", "内容2", None) is True
+    got = Post.get(pid)
+    assert got["title"] == "标题2"
+    assert got["tags"] == ["趣事分享", "技术分享"]
+    assert Post.edit(pid, "标题3", "内容3", []) is True
+    assert Post.get(pid)["tags"] == []
+
+
+# region v4 新结构：状态 / 快照 / 标签计数 / 附件指纹 / 草稿标签 / 多态举报
+def test_v4_tables_exist():
+    """v4 新增的表都在，且 schema 版本已写入。"""
+    tables = set(api.db.get_tables())
+    for name in ("users", "sessions", "audit_logs", "schema_meta", "draft_tags"):
+        assert name in tables, f"缺少表 {name}"
+    assert api._current_user_version() == 4
+
+
+def test_disabled_user_cannot_login_or_get_secret_key():
+    """status=disabled 的账号：登录失败、也签不出管理员密钥。"""
+    u = make_user()
+    assert user_api.login(u["userid"], u["password"]) is True
+    api._User.update(status=api.USER_DISABLED).where(api._User.userid == u["userid"]).execute()
+    assert user_api.login(u["userid"], u["password"]) is False
+    assert user_api.issue_secret_key(u["userid"], u["password"]) is None
+
+
+def test_login_records_last_login_at():
+    """登录成功会写 last_login_at（审计用）。"""
+    u = make_user()
+    assert api._User.get(api._User.userid == u["userid"]).last_login_at == ""
+    assert user_api.login(u["userid"], u["password"]) is True
+    assert api._User.get(api._User.userid == u["userid"]).last_login_at != ""
+
+
+def test_tag_usage_count_follows_publish_edit_delete():
+    """标签的 usage_count 随发布/改标签/删文章增减。"""
+    u = make_user()
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=["技术分享", "校园生活"])
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 1
+    assert counts["校园生活"] == 1
+
+    assert Post.edit(pid, "标题", "内容", ["技术分享"]) is True
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 1
+    assert counts["校园生活"] == 0
+
+    assert Post.delete(pid) is True
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 0
+
+
+def test_author_name_is_snapshotted():
+    """文章与评论保存作者名快照，作者注销后仍能显示署名。"""
+    u = make_user("snap")
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=[])
+    assert Post.get(pid)["author_name"] == u["username"]
+    Post.add_comment(pid, u["userid"], "评论")
+    comment = api._Comment.get(api._Comment.post == pid)
+    assert comment.author_name == u["username"]
+
+
+def test_attachment_metadata_records_sha256_and_is_image():
+    """附件入库记录内容指纹与「是否图片」标记。"""
+    u = make_user()
+    png = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(png, format="PNG")
+    att = Attachment.save(FakeUpload("a.png", png.getvalue(), "image/png"))
+    assert att["sha256"]
+    assert att["is_image"] is True
+    pid = Post.publish(u["userid"], "带附件", "内容", [att], tags=[])
+    row = api._Attachment.get(api._Attachment.post == pid)
+    assert row.sha256 == att["sha256"]
+    assert row.is_image == 1
+
+
+def test_draft_tags_roundtrip():
+    """草稿标签走关联表：保存、读回、更新为空。"""
+    u = make_user()
+    did = Draft.save(u["userid"], "草稿", "内容", ["技术分享", "趣事分享"], "")
+    assert Draft.get_draft(u["userid"], did)["tags"] == ["技术分享", "趣事分享"]
+    assert Draft.save(u["userid"], "草稿", "内容", [], "", draft_id=did) == did
+    assert Draft.get_draft(u["userid"], did)["tags"] == []
+    # 草稿标签不参与 usage_count
+    tag = api._Tag.get_or_none(api._Tag.name == "技术分享")
+    assert tag is None or tag.usage_count >= 0
+
+
+def test_report_target_type_distinguishes_post_and_comment():
+    """举报用 target_type/target_id 表达目标，对外仍是 postid/commentid 契约。"""
+    author = make_user("ra")
+    reporter = make_user("rr")
+    pid = Post.publish(author["userid"], "标题", "内容", [], tags=[])
+    Post.add_comment(pid, author["userid"], "评论")
+    cid = api._Comment.get(api._Comment.post == pid).id
+
+    post_report = Report.add(reporter["userid"], postid=pid, reason="违规文章")
+    comment_report = Report.add(reporter["userid"], postid=pid, commentid=cid, reason="违规评论")
+    rows = {r["id"]: r for r in api._Report.select().dicts()}
+    assert rows[post_report]["target_type"] == "post"
+    assert rows[post_report]["target_id"] == pid
+    assert rows[comment_report]["target_type"] == "comment"
+    assert rows[comment_report]["target_id"] == cid
+
+    # 对外契约不变
+    assert Report.get(post_report)["postid"] == pid
+    assert Report.get(post_report)["commentid"] is None
+    assert Report.get(comment_report)["commentid"] == cid
+
+    # 同一人对同一目标的 pending 举报去重
+    assert Report.add(reporter["userid"], postid=pid, reason="再举报") is None
+
+
+# endregion
+
+
+# ---------------------------------------------------------------------------
+# M3：会话 token（Cookie 只存 token，库里只存 sha256）
+# ---------------------------------------------------------------------------
+def test_session_token_roundtrip():
+    """签发 → 解析 → 撤销：token 明文只出现在返回值里。"""
+    user = User()
+    assert user.register("sess_user", "会话用户", "sess-pass-123") is True
+    token = api.create_session("sess_user")
+    assert token.startswith(api.TOKEN_PREFIX)
+    info = api.resolve_session(token)
+    assert info["userid"] == "sess_user"
+    assert info["role"] == api.USER_ACTIVE or info["role"] == "USER"
+
+    # 库里只有哈希，没有明文
+    rows = [r.token_hash for r in api._Session.select()]
+    assert token not in rows
+    assert api.sha256(token) in rows
+
+    assert api.resolve_session(token) is not None
+    assert api.revoke_session(token) is True
+    assert api.resolve_session(token) is None
+    # 重复撤销返回 False（已经 revoked）
+    assert api.revoke_session(token) is False
+
+
+def test_session_rejects_expired_and_disabled():
+    user = User()
+    assert user.register("sess_exp", "过期用户", "sess-pass-123") is True
+    # ttl_days=-1 → expires_at 在过去
+    expired = api.create_session("sess_exp", ttl_days=-1)
+    assert api.resolve_session(expired) is None
+
+    alive = api.create_session("sess_exp")
+    assert api.resolve_session(alive) is not None
+    api._User.update(status=api.USER_DISABLED).where(api._User.userid == "sess_exp").execute()
+    assert api.resolve_session(alive) is None
+    # 被禁用的用户也不能登录/签发
+    assert api.create_session("sess_exp") == ""
+
+
+def test_revoke_user_sessions_keeps_current():
+    user = User()
+    assert user.register("sess_multi", "多端用户", "sess-pass-123") is True
+    web = api.create_session("sess_multi")
+    phone = api.create_session("sess_multi")
+    assert api.count_sessions("sess_multi") == 2
+
+    api.revoke_user_sessions("sess_multi", keep_token=web)
+    assert api.resolve_session(web) is not None
+    assert api.resolve_session(phone) is None
+    assert api.count_sessions("sess_multi") == 1
+
+
+def test_purge_sessions_removes_expired():
+    user = User()
+    assert user.register("sess_purge", "清理用户", "sess-pass-123") is True
+    alive = api.create_session("sess_purge")
+    api.create_session("sess_purge", ttl_days=-1)
+    assert api.purge_sessions() >= 1
+    assert api.resolve_session(alive) is not None

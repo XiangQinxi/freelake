@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -97,7 +98,5 @@ def read_manifest(data_dir: str | Path) -> dict:
 def configure_stdout() -> None:
     """Windows 控制台默认 GBK，强制 UTF-8 输出避免中文打印报错。"""
     for stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(Exception):
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except Exception:
-            pass

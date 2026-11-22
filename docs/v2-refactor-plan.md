@@ -207,7 +207,7 @@ v2/
 1. 打标签 `pre-v2`（保留当前代码快照）。
 2. 新建 `v2/`，用 `git mv` 迁入代码与资源：`main.py api.py api2.py const.py pages/ static/ tests/ default_avatar.jpeg config.toml requirements.txt .streamlit/config.toml`；运行期数据（`data.db* attachments/ avatars/ .streamlit/secrets.toml`）一并移入，使 `v2/` 自包含可运行。
 3. 根目录保留 `v1/`（参考）、`docs/`、`bench/`、`AGENT.md`、`README.md`、`.gitignore`。
-4. 验证：`cd v2 && python -m pytest tests -q`、`python -m py_compile`、`streamlit run main.py` 冒烟。
+4. 验证：`python -m pytest tests -q`、`python -m py_compile`、`streamlit run main.py` 冒烟。
 5. 在 `v2/` 内开始重构：先模型（v4），后界面。
 
 ---
@@ -225,5 +225,5 @@ v2/
 
 **进度**：M0 ✅ 2026-11-22（`a795bfc`）· M1 ✅ 2026-11-22（v4 14 表 + 适配层，`2480aeb`）· M2 ✅ 2026-11-22（`freelake/db` + `freelake/services` 拆包，`api.py` 变 166 行门面，`16fdc7e`，47 passed）· M3 ✅ 2026-11-22（`freelake/services/sessions.py`，Cookie 只存 `session_token`，`0cd83fe`）· M4 ✅ 2026-11-22（`freelake/web/{text,dialogs,components}.py`，首页 905→631 行，`0cd83fe`）· M5 ✅ 2026-11-22（logging + ruff 全绿 + CI 工作流 + requirements-dev/lock + 导入冒烟测试）
 
-**M5 验收**：`cd v2 && python -m ruff check .` → All checks passed；`python -m pytest tests -q` → **78 passed**（47 数据层 + 31 导入/编译冒烟）；
+**M5 验收**：`python -m ruff check .` → All checks passed；`python -m pytest tests -q` → **78 passed**（47 数据层 + 31 导入/编译冒烟）；
 `.github/workflows/ci.yml` 在 ubuntu-latest / windows-latest × Python 3.13 上跑同一套命令。

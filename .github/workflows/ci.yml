@@ -2,13 +2,17 @@ name: CI
 
 on:
   push:
-    paths:
+    paths-ignore:
+      - "v1/**"
       - "v2/**"
-      - ".github/workflows/ci.yml"
+      - "docs/**"
+      - "bench/**"
   pull_request:
-    paths:
+    paths-ignore:
+      - "v1/**"
       - "v2/**"
-      - ".github/workflows/ci.yml"
+      - "docs/**"
+      - "bench/**"
   workflow_dispatch:
 
 jobs:
@@ -19,9 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: v2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

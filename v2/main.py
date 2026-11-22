@@ -19,7 +19,6 @@ Streamlit 论坛应用的主入口脚本，负责：
   ``api2.check_by_state`` 每次直接查库校验。
 """
 
-import logging
 import os
 import secrets
 
@@ -32,12 +31,9 @@ if not hasattr(st, "cache"):
 
 from streamlit_cookies_manager import EncryptedCookieManager
 
-from api import User, resolve_session
+from api import User
 from api2 import check_by_state
 from const import admin
-from freelake.logging_setup import configure_logging
-
-configure_logging(logging.INFO)
 
 
 def _secrets_get(key, default=None):
@@ -61,17 +57,14 @@ if "secretkey" not in state:
     # 管理员操作（页面上「用户管理」）会用 state["secretkey"] 调 check_admin；
     # 缺这个键会在刷新后直接 KeyError，所以即使未登录也要先置空。
     state["secretkey"] = ""
-if "token" not in state:
-    # Cookie 里只存会话 token（M3）：不存密码、不存管理员密钥。
-    state["token"] = ""
-if "role" not in state:
-    state["role"] = ""
 
 # ---- 加密 Cookie：持久化登录状态（浏览器端加密存储） ----
 # 安全：绝不使用硬编码/公开的兜底密钥（等同于把解密密钥写进仓库）。
 # 未配置时退化为「进程级随机密钥」——攻击者不可知，因此漏洞关闭；
 # 代价是服务重启（或多进程部署）后所有人需要重新登录，并会看到醒目提示。
-_cookie_password = os.environ.get("COOKIES_PASSWORD") or _secrets_get("cookies", {}).get("password")
+_cookie_password = os.environ.get("COOKIES_PASSWORD") or _secrets_get(
+    "cookies", {}
+).get("password")
 if not _cookie_password:
     _cookie_password = secrets.token_urlsafe(32)
     st.warning(
@@ -91,23 +84,12 @@ state["cookies"] = cookies
 # 执行，页面会死锁在「正在加载 Cookies」且需手动刷新。改为未就绪时先按当前
 # 会话状态继续渲染（顶部提示加载中），组件值回传后的下一次 rerun 自动纠正登录态。
 if cookies.ready():
-    # 从 Cookie 恢复登录状态：只有会话 token，密码/密钥永不落浏览器。
-    token = cookies.get("session_token", "")
-    info = resolve_session(token) if token else None
-    if info:
-        state["token"] = token
-        state["userid"] = info["userid"]
-        state["role"] = info["role"]
-    else:
-        state["token"] = ""
-        state["userid"] = ""
-        state["role"] = ""
-    # 清理旧版 Cookie（曾存明文 userid/password/secretkey）
-    legacy = [k for k in ("userid", "password", "secretkey") if k in cookies]
-    if legacy:
-        for k in legacy:
-            del cookies[k]
-        cookies.save()
+    # 从 Cookie 恢复登录状态（未登录时为空字符串）
+    state["userid"] = cookies.get("userid", "")
+    state["password"] = cookies.get("password", "")
+    # secretkey 必须一起恢复：页面刷新后 session_state 会清空，而
+    # pages/admin.py 的「修改角色 / 删除用户」用 state["secretkey"] 调 check_admin。
+    state["secretkey"] = cookies.get("secretkey", "")
 else:
     st.info("⏳ 正在加载 Cookies，请稍候...")
 
@@ -196,7 +178,9 @@ login_page = st.Page("pages/login.py", title=":material/login: 登录")
 register_page = st.Page("pages/register.py", title=":material/person: 注册")
 logout_page = st.Page("pages/logout.py", title=":material/logout: 退出登录")
 admin_page = st.Page("pages/admin.py", title=":material/security: 管理员页面")
-image_generate_page = st.Page("pages/image_generate.py", title=":material/auto_awesome: 图片生成")
+image_generate_page = st.Page(
+    "pages/image_generate.py", title=":material/auto_awesome: 图片生成"
+)
 
 # ---- 按登录状态与角色组装「账号」导航组 ----
 user = User()

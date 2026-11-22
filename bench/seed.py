@@ -191,9 +191,7 @@ def seed_users(api, rng: random.Random, count: int, shared_hash: str) -> list[st
     return user_ids
 
 
-def seed_posts(
-    api, rng: random.Random, count: int, user_ids: list[str], tags: list[str]
-):
+def seed_posts(api, rng: random.Random, count: int, user_ids: list[str], tags: list[str]):
     """返回 (post 行列表, 创建时间列表, 作者列表, 每篇的标签列表)。
 
     v2：``_post`` 只有 ``author_id``，标签/附件/评论都在各自的关联表里。
@@ -238,7 +236,7 @@ def seed_tags(api, tags_per_post: list[list[str]], post_ids: list[int]) -> dict[
         for name in names:
             tag, _ = api._Tag.get_or_create(name=name)
             tag_ids[name] = tag.id
-        for pid, chosen in zip(post_ids, tags_per_post):
+        for pid, chosen in zip(post_ids, tags_per_post, strict=True):
             for position, name in enumerate(chosen):
                 rows.append({"post": pid, "tag": tag_ids[name], "position": position})
         chunked_insert(api._PostTag, rows)
@@ -303,7 +301,7 @@ def seed_comments(
             for cid in slice_ids:
                 comment_postid[cid] = post_ids[post_index]
             pos += n_rows
-        for cid, row in zip(ids, batch_rows):
+        for cid, row in zip(ids, batch_rows, strict=True):
             comment_userid[cid] = row["user_id"]
         batch_rows.clear()
         batch_groups.clear()
@@ -374,9 +372,7 @@ def seed_likes_and_bookmarks(
     return {
         "likes": len(like_pairs),
         "bookmarks": len(bookmark_pairs),
-        "bookmarks_for_bench_user": sum(
-            1 for _, uid in bookmark_pairs if uid == BOOKMARK_USER
-        ),
+        "bookmarks_for_bench_user": sum(1 for _, uid in bookmark_pairs if uid == BOOKMARK_USER),
     }
 
 
@@ -475,9 +471,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--seed", type=int, default=20260101, help="随机种子（保证可复现，默认 20260101）"
     )
-    parser.add_argument(
-        "--quiet", action="store_true", help="只输出汇总信息"
-    )
+    parser.add_argument("--quiet", action="store_true", help="只输出汇总信息")
     return parser.parse_args(argv)
 
 
@@ -492,9 +486,7 @@ def main(argv: list[str] | None = None) -> int:
             data_dir = PROJECT_ROOT / data_dir
         data_dir = data_dir.resolve()
     else:
-        data_dir = Path(
-            tempfile.mkdtemp(prefix=f"freelake_bench_x{scale:g}_")
-        ).resolve()
+        data_dir = Path(tempfile.mkdtemp(prefix=f"freelake_bench_x{scale:g}_")).resolve()
 
     started = time.perf_counter()
     print(f"{PRINT_PREFIX} 数据集目录：{data_dir}")
@@ -582,9 +574,7 @@ def main(argv: list[str] | None = None) -> int:
     tag_count = api.Post.count_filtered(tag=BENCH_TAG)
     range_start = dt.date.fromisoformat(BENCH_DATE_RANGE[0])
     range_end = dt.date.fromisoformat(BENCH_DATE_RANGE[1])
-    range_count = api.Post.count_filtered(
-        start_date=range_start, end_date=range_end
-    )
+    range_count = api.Post.count_filtered(start_date=range_start, end_date=range_end)
     heavy_posts = api.Post.get_by_author(HEAVY_AUTHOR)
     bookmark_ids = api.Bookmark.get_bookmarked_post_ids(BOOKMARK_USER)
 
