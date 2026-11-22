@@ -222,6 +222,6 @@ v2/
 | M3 | 会话改造：Cookie 只存 token，`check_by_state` 查 sessions | 登录/登出/改密全链路 |
 | M4 | 界面布局重构（layout/components/views 拆分） | 首页三路由拆分、后台分 tab |
 
-**进度**：M0 ✅ 2026-11-22（`a795bfc`）· M1 ✅ 2026-11-22（v4 14 表 + 适配层，`pytest` 43 passed）
+**进度**：M0 ✅ 2026-11-22（`a795bfc`）· M1 ✅ 2026-11-22（v4 14 表 + 适配层，`pytest` 43 passed）· M2 ✅ 2026-11-22（`freelake/db` + `freelake/services` 拆包，`api.py` 变 166 行门面）
 
 | M5 | 工程化（日志、requirements.lock、CI、AppTest 组件测试） | CI 绿 |

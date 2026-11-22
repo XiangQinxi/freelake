@@ -4,9 +4,10 @@
 > 目标：**读完本文件即可在不破坏现有约定的前提下改代码**。
 > 最后更新：2026-11-22（v2 重构 M1 完成；代码整体在 `v2/`，数据模型已升级为 **v4 / 14 表**，本文路径如无特别说明均相对 `v2/`）
 >
-> **M1 状态（2026-11-22）**：`v2/freelake/db/`（connection / models / schema）承载 v4 模型；`v2/api.py` 经适配层
-> 保持 v1 对外键名不变，`cd v2 && python -m pytest tests -q` → **43 passed**。数据模型细节以
-> `docs/v2-refactor-plan.md` 的 v4 设计 + `v2/freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
+> **M2 状态（2026-11-22）**：数据层已按职责拆包到 `v2/freelake/`（`db/` 连接·模型·适配·SQL，`services/`
+> 用户·文章·内容·互动·后台·引导），`v2/api.py` 只剩 **166 行门面**（re-export + 启动装配）。页面与
+> `api2.py` 仍只 `from api import …`，迁移零改动。`cd v2 && python -m pytest tests -q` → **43 passed**。
+> 数据模型细节以 `docs/v2-refactor-plan.md` 的 v4 设计 + `v2/freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
 > 仓库根 `data.db` 已是 v4 结构：旧库自动归档为 `data.db.legacy-<时间戳>`（v2 目录内）。
 
 > **目录布局（2026-11 起）**：`v1/` = 上一代实现（只读参考）；`v2/` = 当前代码与重构工作区；`docs/` = 设计与审查文档（含 `docs/v2-refactor-plan.md`）；`bench/` = 性能基准。
@@ -113,16 +114,22 @@ st.navigation(nav).run()
   ↓
 pages/*.py         # 每个页面脚本顶部直接执行（无函数入口）
   ↓
-api2.check_by_state() ──→ api.User.check()  # 每次 rerun 都真实查库
+api2.check_by_state() ──→ api.User.check()  # 每次 rerun 查库（密码校验结果会话内缓存 5 分钟）
   ↓
-api.py             # 唯一数据访问入口；模块导入时完成建表+引导
+api.py             # 166 行门面：re-export + 导入时建表/引导管理员/发公告
+  ↓
+freelake/services/  # users / posts / content / interactions / admin / security / bootstrap
+  ↓
+freelake/db/        # connection（pragmas）· models（v4 14 表）· schema（版本+归档+索引）
+                    # adapters（行→dict，键名保持 v1）· query（只读 SQL 授权+脱敏）
   ↓
 data.db (SQLite) + attachments/ + avatars/
 ```
 
 **分层铁律**
 
-1. 页面只调 `api.*` 与 `api2.check_by_state()`，**不直接写 SQL、不直接用 peewee 模型**（唯一例外：测试文件）。
+1. 页面只调 `api.*` 与 `api2.check_by_state()`，**不直接写 SQL、不直接用 peewee 模型、不直接 import `freelake.services`**
+   （唯一例外：测试文件；`api.py` 作为门面存在的意义就是让页面不受服务层内部调整影响）。
 2. 数据层不得 import 页面，也不应感知 UI（当前 `api.py` 里 import streamlit 只为了
    `st.secrets` / `st.cache_data`，属于历史妥协，新增逻辑尽量不要再依赖 st）。
 3. `api2.py` 只做「会话状态 → bool」，不加业务。
