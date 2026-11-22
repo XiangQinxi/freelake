@@ -6,7 +6,7 @@
 >
 > **重构状态（2026-11-22，M0–M5 全部完成）**：代码在 `v2/`，分层为 `pages/*`（视图）→ `freelake/web/*`（组件/对话框）
 > → `freelake/services/*`（业务）→ `freelake/db/*`（模型/适配/SQL）→ `data.db`；`v2/api.py` 是 **166 行门面**
-> （re-export + 启动装配），页面与 `api2.py` 仍只 `from api import …`。`cd v2 && python -m pytest tests -q` → **47 passed**，
+> （re-export + 启动装配），页面与 `api2.py` 仍只 `from api import …`。`cd v2 && python -m pytest tests -q` → **78 passed**，
 > `python -m ruff check .` → 全绿。会话只存 Cookie `session_token`（库内是 `sha256`），不再存明文密码。
 > 数据模型细节以 `docs/v2-refactor-plan.md` 的 v4 设计 + `v2/freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
 > 仓库根 `data.db` 已是 v4 结构：旧库自动归档为 `data.db.legacy-<时间戳>`（v2 目录内）。

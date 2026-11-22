@@ -1,0 +1,15 @@
+# 顶层依赖的实测版本锁（pip freeze 的全量清单对部署无意义，这里只锁直接依赖）
+# 用法：pip install -r requirements.lock.txt（与 requirements.txt 二选一）
+
+streamlit==1.66.1
+peewee==4.3.0
+Pillow==12.3.0
+toml==0.10.2
+pandas==3.0.5
+altair==5.5.0
+openai==3.1.0
+streamlit-cookies-manager==0.2.0
+streamlit-file-browser==3.2.22
+streamlit-video-background==0.2.0
+pytest==8.3.5
+ruff==0.15.10

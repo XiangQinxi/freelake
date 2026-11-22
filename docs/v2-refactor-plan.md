@@ -223,7 +223,7 @@ v2/
 | M4 | 界面布局重构（layout/components/views 拆分） | 首页三路由拆分、后台分 tab |
 | M5 | 工程化（日志、requirements.lock、CI、AppTest 组件测试） | CI 绿 |
 
-**进度**：M0 ✅ 2026-11-22（`a795bfc`）· M1 ✅ 2026-11-22（v4 14 表 + 适配层，`2480aeb`）· M2 ✅ 2026-11-22（`freelake/db` + `freelake/services` 拆包，`api.py` 变 166 行门面，`16fdc7e`，47 passed）· M3 ✅ 2026-11-22（`freelake/services/sessions.py`，Cookie 只存 `session_token`，`0cd83fe`）· M4 ✅ 2026-11-22（`freelake/web/{text,dialogs,components}.py`，首页 905→631 行，`0cd83fe`）· M5 ✅ 2026-11-22（logging + ruff 全绿 + CI 工作流 + requirements-dev，`1d7d455`）
+**进度**：M0 ✅ 2026-11-22（`a795bfc`）· M1 ✅ 2026-11-22（v4 14 表 + 适配层，`2480aeb`）· M2 ✅ 2026-11-22（`freelake/db` + `freelake/services` 拆包，`api.py` 变 166 行门面，`16fdc7e`，47 passed）· M3 ✅ 2026-11-22（`freelake/services/sessions.py`，Cookie 只存 `session_token`，`0cd83fe`）· M4 ✅ 2026-11-22（`freelake/web/{text,dialogs,components}.py`，首页 905→631 行，`0cd83fe`）· M5 ✅ 2026-11-22（logging + ruff 全绿 + CI 工作流 + requirements-dev/lock + 导入冒烟测试）
 
-**M5 验收**：`cd v2 && python -m ruff check .` → All checks passed；`python -m pytest tests -q` → **47 passed**；
+**M5 验收**：`cd v2 && python -m ruff check .` → All checks passed；`python -m pytest tests -q` → **78 passed**（47 数据层 + 31 导入/编译冒烟）；
 `.github/workflows/ci.yml` 在 ubuntu-latest / windows-latest × Python 3.13 上跑同一套命令。
