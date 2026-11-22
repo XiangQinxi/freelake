@@ -81,18 +81,21 @@ api_key = "sk-..."
 
 ```
 freelake/
-├── v2/                      # 当前开发目录（重构进行中）
-│   ├── main.py              # 入口：会话/Cookie 初始化 + st.navigation 导航
-│   ├── pages/               # 页面目录（st.navigation 引用）
-├── api.py                   # 数据层：peewee 模型 + 业务接口 + 密码哈希 + 导出/管理工具
+├── main.py                  # 入口：会话/Cookie 初始化 + st.navigation 导航
+├── api.py                   # 门面（约 170 行）：re-export 数据层 + 启动装配
 ├── api2.py                  # 会话辅助层：登录状态判断（依赖 st.session_state）
+├── freelake/                # 重构后的分层实现
+│   ├── db/                  # 连接、v4 模型（14 表）、schema、适配层、只读 SQL
+│   ├── services/            # 安全/会话/用户/文章/内容/互动/后台/引导
+│   ├── web/                 # 首页组件：高亮、对话框、卡片
+│   └── config.py            # 常量、路径、敏感列清单
 ├── const.py                 # 全局常量：文章标签、角色标识
 ├── config.toml              # 管理员基础信息（密码放在 secrets 中，勿提交）
-├── requirements.txt         # Python 依赖
+├── requirements.txt         # Python 依赖（requirements.lock.txt 为实测版本）
 ├── data.db                  # SQLite 数据库（gitignore）
 ├── attachments/             # 上传的附件文件（gitignore）
 ├── avatars/                 # 用户头像文件（gitignore）
-
+├── pages/                   # st.navigation 页面
 │   ├── home.py              # 首页：列表/搜索/详情/评论/用户资料与账号设置（?user_id=本人）
 │   ├── publish.py           # 发布文章（含草稿箱）
 │   ├── login.py             # 登录
@@ -100,7 +103,11 @@ freelake/
 │   ├── logout.py            # 退出登录
 │   ├── admin.py             # 管理员后台
 │   └── image_generate.py    # AI 图片生成（管理员）
-└── v1/                      # 上代版本文件，勿动
+├── tests/                   # pytest（数据层 + 导入冒烟）
+├── docs/                    # 设计、审查与重构文档
+├── bench/                   # 性能基准
+├── v2/                      # 重构前快照（5dbccbd，只读参考，勿改）
+└── v1/                      # 更早的一代实现（只读参考）
 ```
 
 ### 数据层接口（api.py）

@@ -201,9 +201,9 @@ api_key = "sk-…"
 
 ---
 
-## 6. 数据模型（历史：v2/v3；v4 见 `v2/freelake/db/models.py`）
+## 6. 数据模型（历史：v2/v3；v4 见 `freelake/db/models.py`）
 
-> ⚠️ v4 起模型不在 `api.py` 里，而在 `v2/freelake/db/models.py`（14 表：users/sessions/posts/tags/post_tags/
+> ⚠️ v4 起模型不在 `api.py` 里，而在 `freelake/db/models.py`（14 表：users/sessions/posts/tags/post_tags/
 > attachments/comments/likes/bookmarks/reports/drafts/draft_tags/audit_logs/schema_meta）。
 > 本节描述的是 v2/v3 时代的单文件模型，保留是为了理解适配层为什么这么写。
 
