@@ -2,7 +2,12 @@
 
 > 本文件是给下一个接手此项目的 AI Agent / 开发者的交接说明。
 > 目标：**读完本文件即可在不破坏现有约定的前提下改代码**。
-> 最后更新：2026-11-22（v2 重构启动；代码已整体迁入 `v2/`，本文路径如无特别说明均相对 `v2/`）
+> 最后更新：2026-11-22（v2 重构 M1 完成；代码整体在 `v2/`，数据模型已升级为 **v4 / 14 表**，本文路径如无特别说明均相对 `v2/`）
+>
+> **M1 状态（2026-11-22）**：`v2/freelake/db/`（connection / models / schema）承载 v4 模型；`v2/api.py` 经适配层
+> 保持 v1 对外键名不变，`cd v2 && python -m pytest tests -q` → **43 passed**。数据模型细节以
+> `docs/v2-refactor-plan.md` 的 v4 设计 + `v2/freelake/db/models.py` 为准，§6 的 v2/v3 描述仅作历史参考。
+> 仓库根 `data.db` 已是 v4 结构：旧库自动归档为 `data.db.legacy-<时间戳>`（v2 目录内）。
 
 > **目录布局（2026-11 起）**：`v1/` = 上一代实现（只读参考）；`v2/` = 当前代码与重构工作区；`docs/` = 设计与审查文档（含 `docs/v2-refactor-plan.md`）；`bench/` = 性能基准。
 > 运行与测试都要先 `cd v2`（`data.db`、`config.toml` 等路径按 CWD 解析）。
@@ -184,7 +189,11 @@ api_key = "sk-…"
 
 ---
 
-## 6. 数据模型 v2（`api.py` 模型区 + 适配层）
+## 6. 数据模型（历史：v2/v3；v4 见 `v2/freelake/db/models.py`）
+
+> ⚠️ v4 起模型不在 `api.py` 里，而在 `v2/freelake/db/models.py`（14 表：users/sessions/posts/tags/post_tags/
+> attachments/comments/likes/bookmarks/reports/drafts/draft_tags/audit_logs/schema_meta）。
+> 本节描述的是 v2/v3 时代的单文件模型，保留是为了理解适配层为什么这么写。
 
 所有模型以 `_` 开头（peewee 实体），对外暴露无下划线业务类。时间仍是 `YYYY-MM-DD HH:MM:SS` **字符串**
 （字典序 = 时间序，日期区间过滤直接字符串比较，**不要改成 datetime**）。

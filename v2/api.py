@@ -41,17 +41,36 @@ from PIL import Image
 from playhouse.mysql_ext import JSONField  # NOQA
 
 from const import admin, announcement_tags, user
-
-# 数据库连接。pragma 说明：
-# - foreign_keys：打开外键约束，删除文章时由 SQLite 级联清理评论/点赞/收藏/标签/附件
-# - busy_timeout：并发写时等待而不是立即报 locked
-# 刻意不开 WAL：管理后台的「下载 data.db 备份」直接读库文件字节，WAL 模式下会漏数据
-db = SqliteDatabase(
-    "data.db",
-    pragmas={"foreign_keys": 1, "busy_timeout": 5000},
+from freelake.db.connection import UNIQUE_VIOLATION, db
+from freelake.db.models import (
+    ALL_MODELS,
+    TARGET_COMMENT,
+    TARGET_POST,
+    NOW_FORMAT,
+    USER_ACTIVE,
+    USER_DISABLED,
+    AttachmentModel as _Attachment,
+    BookmarkModel as _Bookmark,
+    CommentModel as _Comment,
+    DraftModel as _Draft,
+    DraftTagModel as _DraftTag,
+    LikeModel as _Like,
+    PostModel as _Post,
+    PostTagModel as _PostTag,
+    ReportModel as _Report,
+    SchemaMetaModel as _SchemaMeta,
+    SessionModel as _Session,
+    TagModel as _Tag,
+    UserModel as _User,
+    now_str,
 )
-# 唯一索引 / 外键冲突：peewee 会把 sqlite3 的异常包装成自己的 IntegrityError
-UNIQUE_VIOLATION = (IntegrityError, sqlite3.IntegrityError)
+from freelake.db.schema import (
+    SCHEMA_VERSION,
+    archive_legacy_db,
+    current_schema_version,
+    init_database,
+)
+
 salt = "freelake"
 
 # 附件存储目录（在项目根目录下创建 attachments 文件夹）
@@ -225,245 +244,8 @@ def generate_sk_key(byte_length=40):
     return "sk-" + hex_part
 
 
-# region 数据库模型
-# ---------------------------------------------------------------------------
-# v2 模型设计（重构目标：更易读、更高性能；不做数据迁移，旧库自动备份后重建）
-# ---------------------------------------------------------------------------
-# 1. 表名维持 v1（_user/_post/...）：管理后台的只读 SQL 工具与历史文档都按此书写，
-#    改名收益小、破坏面大。
-# 2. 列名统一 snake_case；对外返回的 dict 键保持 v1 写法（authorid/postid/...），
-#    由 _user_dict / _post_dicts / _comment_dict 等适配函数转换 —— 页面脚本零改动。
-# 3. 时间仍是 "YYYY-MM-DD HH:MM:SS" 字符串（字典序即时间序），不迁移成 datetime。
-# 4. 「逻辑外键」= 只存 id 不加约束：作者 / 评论者 / 举报人。用户被删除后内容保留，
-#    页面显示「用户已注销」，与 v1 行为一致。
-#    「从属外键」= ForeignKeyField(on_delete="CASCADE")：文章的评论 / 点赞 / 收藏 /
-#    标签 / 附件。删除文章时由 SQLite 自动级联清理（v1 手工删评论，点赞收藏会留孤儿）。
-# 5. 标签从 _post.tags(JSON 数组) 改成 _tag + _post_tag 关联表：可建索引、可统计、
-#    可精确匹配（v1 靠 JSON.contains，无法走索引）。
-# 6. 点赞 / 收藏 / 评论数冗余在 _post 上（like_count / bookmark_count / comment_count）：
-#    列表页按热度排序直接 ORDER BY 带索引的列，不必全表 group by 再 Python 排序。
-#    写路径全部集中在本模块，计数器与明细表在同一事务内增减。
-# 7. 高频过滤 / 排序列都有索引，见各模型 Meta.indexes。
-# ---------------------------------------------------------------------------
+# 模型定义已迁移到 ``freelake.db.models``（v4）；上方按旧名别名导入。
 
-SCHEMA_VERSION = 3
-NOW_FORMAT = "%Y-%m-%d %H:%M:%S"
-# 会话密钥（Cookie 里的 secretkey）有效期：过期后管理员操作需重新登录
-SECRET_KEY_TTL_DAYS = 30
-
-
-def now_str() -> str:
-    """当前时间的统一字符串格式（字典序即时间序）。"""
-    return datetime.datetime.now().strftime(NOW_FORMAT)
-
-
-class BaseModel(Model):
-    class Meta:
-        database = db
-
-
-class _User(BaseModel):
-    """用户表（_user）。userid 是业务主键（学号 / 登录名），全站都用它引用用户。"""
-
-    userid = CharField(primary_key=True)
-    username = CharField(index=True)
-    password = CharField(max_length=256)  # PBKDF2 哈希串，兼容旧 sha256
-    created_at = CharField(default=now_str)
-    description = TextField(default="这个用户有点懒，什么也没留下~")
-    avatar = CharField(default="default_avatar.jpeg")  # 头像文件地址（文件名）
-    role = CharField(default=user, index=True)  # const.admin / const.user
-    # 会话密钥不再是长期明文凭据：库里只存 sha256 哈希 + 过期时间，
-    # 明文只在登录成功那一刻写进加密 Cookie（见 User.issue_secret_key）。
-    secret_key_hash = CharField(max_length=64, index=True, default="")
-    secret_key_expires_at = CharField(max_length=19, default="")
-
-    class Meta:
-        table_name = "_user"
-        constraints = [Check(f"role IN ('{admin}', '{user}')")]
-
-    def __str__(self):
-        return self.userid
-
-
-class _Post(BaseModel):
-    """文章表（_post）。
-
-    附件、标签、评论都不再以 JSON 数组存在本表：
-    附件 → _attachment（一对一的多行），标签 → _post_tag，评论 → _comment.post_id。
-    """
-
-    id = AutoField()
-    author_id = CharField(index=True)  # 逻辑外键 → _user.userid
-    title = TextField()
-    content = TextField()
-    created_at = CharField(default=now_str)
-    attpassword = CharField(max_length=256, default="")  # sha256(明文 + salt)，空串=无密码
-    views = IntegerField(default=0)
-    # 冗余计数器：由 Like / Bookmark / Post.add_comment 在同一事务内维护
-    like_count = IntegerField(default=0)
-    bookmark_count = IntegerField(default=0)
-    comment_count = IntegerField(default=0)
-
-    class Meta:
-        table_name = "_post"
-        indexes = (
-            (("created_at", "id"), False),  # 默认排序（时间倒序）
-            (("author_id", "id"), False),  # 个人主页文章列表
-            (("views", "id"), False),  # 按浏览量排序
-            (("like_count", "id"), False),  # 按点赞量排序
-            (("bookmark_count", "id"), False),  # 按收藏量排序
-        )
-
-
-class _Tag(BaseModel):
-    """标签维度表（_tag）。name 唯一，用户只能选 const.tags 里的标签，但公告等
-    内部内容允许使用额外标签（如「迎新」「社区规范」）。"""
-
-    id = AutoField()
-    name = CharField(unique=True)
-
-    class Meta:
-        table_name = "_tag"
-
-
-class _PostTag(BaseModel):
-    """文章-标签关联表（_post_tag）。主键 (post_id, tag_id) 天然去重；
-    position 保留用户在发布页选择标签的先后顺序。"""
-
-    post = ForeignKeyField(_Post, on_delete="CASCADE")
-    tag = ForeignKeyField(_Tag, on_delete="CASCADE")
-    position = IntegerField(default=0)
-
-    class Meta:
-        table_name = "_post_tag"
-        primary_key = CompositeKey("post", "tag")
-        indexes = ((("tag", "post"), False),)  # 反查：某标签下的文章
-
-
-class _Attachment(BaseModel):
-    """附件表（_attachment）。文件本体在 attachments/ 目录，这里只存元数据。"""
-
-    id = AutoField()
-    post = ForeignKeyField(_Post, on_delete="CASCADE", index=True)
-    original_name = CharField()  # 上传时的原始文件名（下载/打包时用）
-    stored_name = CharField(unique=True)  # 磁盘上的 uuid 文件名
-    mime = CharField(default="")  # MIME 类型（image/png 等）
-    size = IntegerField(default=0)  # 字节数
-    created_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_attachment"
-
-
-class _Comment(BaseModel):
-    """评论表（_comment）。post_id 为级联外键，删文章自动删评论。"""
-
-    id = AutoField()
-    post = ForeignKeyField(_Post, on_delete="CASCADE", index=True)
-    user_id = CharField(index=True)  # 逻辑外键 → _user.userid
-    content = TextField()
-    created_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_comment"
-        indexes = ((("post", "created_at", "id"), False),)  # 文章内按时间排序
-
-
-class _Like(BaseModel):
-    """点赞表（_like）。主键 (post_id, user_id) 保证同一用户只能点一次。"""
-
-    post = ForeignKeyField(_Post, on_delete="CASCADE")
-    user_id = CharField()
-    created_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_like"
-        primary_key = CompositeKey("post", "user_id")
-        indexes = ((("user_id",), False),)
-
-
-class _Bookmark(BaseModel):
-    """收藏表（_bookmark）。主键 (post_id, user_id) 保证同一用户只能收藏一次。"""
-
-    post = ForeignKeyField(_Post, on_delete="CASCADE")
-    user_id = CharField()
-    created_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_bookmark"
-        primary_key = CompositeKey("post", "user_id")
-        indexes = (
-            (("user_id", "created_at"), False),  # 「我的收藏」按收藏时间倒序
-        )
-
-
-class _Report(BaseModel):
-    """举报表（_report）。
-
-    post_id / comment_id 故意不加外键：举报记录是审计快照，被举报内容删除后仍需保留。
-    comment_id 为 NULL 表示「举报文章」，非 NULL 表示「举报该文章下的某条评论」——
-    这是区分举报目标的唯一依据。
-    """
-
-    id = AutoField()
-    post_id = IntegerField(null=True, index=True)  # 被举报文章（举报评论时也记录所属文章）
-    comment_id = IntegerField(null=True, index=True)  # 被举报评论；NULL = 举报文章
-    target_user_id = CharField()  # 被举报内容的作者
-    reporter_id = CharField()  # 举报人
-    content_preview = TextField(default="")  # 被举报内容摘要快照（删除后仍可追溯）
-    reason = TextField()
-    status = CharField(default="pending", index=True)  # pending / handled / dismissed
-    handled_by = CharField(default="")
-    handled_at = CharField(default="")
-    note = TextField(default="")
-    created_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_report"
-        indexes = ((("status", "id"), False),)  # 后台按状态筛选 + 倒序
-        constraints = [
-            Check("status IN ('pending', 'handled', 'dismissed')"),
-        ]
-
-
-class _Draft(BaseModel):
-    """用户草稿（_draft）。
-
-    仅保留标题 / 内容 / 标签 / 专属密码；附件不落盘，需在发布前重新上传，
-    避免草稿产生孤立附件文件。草稿是临时数据，标签仍用 JSON 数组（无需查询）。
-    """
-
-    id = AutoField()
-    user_id = CharField(index=True)  # 逻辑外键 → _user.userid
-    title = TextField(default="")
-    content = TextField(default="")
-    tags = JSONField(default=list)
-    attpassword = CharField(default="")  # 草稿里存明文，发布时才 sha256
-    created_at = CharField(default=now_str)
-    updated_at = CharField(default=now_str)
-
-    class Meta:
-        table_name = "_draft"
-        indexes = ((("user_id", "id"), False),)
-
-
-# 建表清单（顺序即依赖顺序：被引用者在前）
-ALL_MODELS = [
-    _User,
-    _Post,
-    _Tag,
-    _PostTag,
-    _Attachment,
-    _Comment,
-    _Like,
-    _Bookmark,
-    _Report,
-    _Draft,
-]
-
-
-
-# endregion
 
 
 # region 行 → 对外 dict（v1 键名适配层）
@@ -476,11 +258,15 @@ def _user_dict(row) -> dict:
     return {
         "userid": row["userid"],
         "username": row["username"],
-        "password": row["password"],
+        "password": row["password_hash"],
         "created_at": row["created_at"],
         "description": row["description"],
         "avatar": row["avatar"],
         "role": row["role"],
+        # v4 新增的账号运维字段（管理后台表格用；不含任何密钥）
+        "status": row.get("status", USER_ACTIVE),
+        "last_login_at": row.get("last_login_at", ""),
+        "updated_at": row.get("updated_at", ""),
     }
 
 
@@ -500,7 +286,9 @@ def _report_dict(row) -> dict:
     return {
         "id": row["id"],
         "postid": row["post_id"],
-        "commentid": row["comment_id"],
+        # v4 用 target_type/target_id 统一表达举报对象，这里还原 v1 契约：
+        # commentid 为 None 表示「举报的是文章」。
+        "commentid": row["target_id"] if row["target_type"] == "comment" else None,
         "target_userid": row["target_user_id"],
         "reporter_userid": row["reporter_id"],
         "content_preview": row["content_preview"],
@@ -513,14 +301,14 @@ def _report_dict(row) -> dict:
     }
 
 
-def _draft_dict(row) -> dict:
-    """_draft 行 → v1 形状 dict。"""
+def _draft_dict(row, tags: list[str] | None = None) -> dict:
+    """_draft 行 → v1 形状 dict（标签来自 _draft_tag 关联表）。"""
     return {
         "id": row["id"],
         "userid": row["user_id"],
         "title": row["title"],
         "content": row["content"],
-        "tags": row["tags"],
+        "tags": tags or [],
         "attpassword": row["attpassword"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -535,6 +323,23 @@ def _attachment_dict(row) -> dict:
         "type": row["mime"],
         "size": row["size"],
     }
+
+
+def _draft_tag_map(draft_ids) -> dict[int, list[str]]:
+    """批量取草稿标签：{draft_id: [标签名, ...]}（一次查询，按保存顺序）。"""
+    if not draft_ids:
+        return {}
+    rows = (
+        _DraftTag.select(_DraftTag.draft, _Tag.name)
+        .join(_Tag, on=(_DraftTag.tag == _Tag.id))
+        .where(_DraftTag.draft.in_(list(draft_ids)))
+        .order_by(_DraftTag.draft, _DraftTag.position)
+        .dicts()
+    )
+    result: dict[int, list[str]] = {}
+    for row in rows:
+        result.setdefault(row["draft"], []).append(row["name"])
+    return result
 
 
 def _tag_map(post_ids) -> dict[int, list[str]]:
@@ -617,6 +422,7 @@ def _post_dicts(rows, *, with_comments=False, with_last_comment=False) -> list[d
             {
                 "id": pid,
                 "authorid": row["author_id"],
+                "author_name": row.get("author_name", ""),
                 "title": row["title"],
                 "content": row["content"],
                 "created_at": row["created_at"],
@@ -691,6 +497,9 @@ def sha256(value):
 
 
 PBKDF2_ITERATIONS = 200_000
+
+# 管理员会话密钥（secret_key）有效期：过期后需重新登录换取
+SECRET_KEY_TTL_DAYS = 30
 
 
 # 用户 ID：3–20 位字母/数字/下划线/连字符（全站用它拼 URL 与 Cookie）
@@ -777,61 +586,18 @@ def _verify_password_uncached(password: str, stored: str) -> bool:
     return hmac.compare_digest(sha256(password), stored)
 
 
-# region 库结构初始化（v2）：旧库自动备份后重建
+# region 库结构初始化（v4）：实现见 freelake.db.schema
 def _db_path() -> str:
-    """数据库文件路径（相对当前工作目录，与 v1 一致）。"""
+    """数据库文件路径（相对当前工作目录）。"""
     return db.database
 
 
 def _current_user_version() -> int:
-    row = db.execute_sql("PRAGMA user_version").fetchone()
-    return int(row[0]) if row else 0
+    return current_schema_version()
 
 
 def _archive_legacy_db() -> str:
-    """把 v1 结构的数据文件改名备份（不做数据迁移），返回备份文件名。"""
-    db.close()
-    path = _db_path()
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = f"{path}.legacy-{stamp}"
-    if os.path.exists(path):
-        os.replace(path, backup)
-    db.connect()
-    print(
-        "[api] 检测到旧版数据库结构：本版本不做数据迁移，"
-        f"旧库已备份为 {os.path.basename(backup)}，正在重建空库。"
-    )
-    return backup
-
-
-def _create_partial_indexes() -> None:
-    """举报去重从「应用层先查再插」升级为数据库约束。
-
-    同一举报人对同一目标的 pending 举报只能有一条；partial unique index 只约束
-    pending 状态，已处理/已驳回后可以重新举报。
-    """
-    db.execute_sql(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_report_pending_post "
-        "ON _report(reporter_id, post_id) "
-        "WHERE comment_id IS NULL AND status = 'pending'"
-    )
-    db.execute_sql(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_report_pending_comment "
-        "ON _report(reporter_id, comment_id) "
-        "WHERE comment_id IS NOT NULL AND status = 'pending'"
-    )
-
-
-def init_database() -> None:
-    """建连 + 建表 + 结构版本校验（导入本模块时自动执行一次）。"""
-    db.connect(reuse_if_open=True)
-    legacy = db.table_exists("_post") and _current_user_version() != SCHEMA_VERSION
-    if legacy:
-        _archive_legacy_db()
-    db.create_tables(ALL_MODELS, safe=True)
-    _create_partial_indexes()
-    if _current_user_version() != SCHEMA_VERSION:
-        db.execute_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    return archive_legacy_db()
 
 
 init_database()
@@ -843,7 +609,7 @@ if _admin.get("userid") and _admin.get("password"):
         _User.create(
             userid=_admin["userid"],
             username=_admin.get("username") or _admin["userid"],
-            password=hash_password(_admin["password"]),
+            password_hash=hash_password(_admin["password"]),
             role=admin,
             created_at=now_str(),
         )
@@ -879,9 +645,11 @@ class User:
                 _User.create(
                     userid=userid,
                     username=username,
-                    password=hash_password(password),
+                    password_hash=hash_password(password),
                     role=role,
+                    status=USER_ACTIVE,
                     created_at=now_str(),
+                    updated_at=now_str(),
                 )
             except UNIQUE_VIOLATION:  # 并发注册同一 ID：主键冲突
                 return False
@@ -893,11 +661,14 @@ class User:
         """登录账号，如果用户名与其密码对应上则返回`True`"""
         if userid and password:
             user = _User.get_or_none(_User.userid == userid)
-            if user and verify_password(password, user.password):
+            if user and user.status == USER_ACTIVE and verify_password(
+                password, user.password_hash
+            ):
                 # 旧版 sha256 密码校验成功后自动升级为 PBKDF2
-                if not user.password.startswith("pbkdf2$"):
-                    user.password = hash_password(password)
-                    user.save()
+                if not user.password_hash.startswith("pbkdf2$"):
+                    user.password_hash = hash_password(password)
+                user.last_login_at = now_str()
+                user.save()
                 return True
         return False
 
@@ -931,8 +702,8 @@ class User:
 
     @staticmethod
     def get_all() -> list[dict[str, str]]:
-        """数据整理成`list[dict[str, str]]`"""
-        return list(_User.select().dicts())
+        """数据整理成`list[dict[str, str]]`（经适配层，不泄露哈希列）。"""
+        return [_user_dict(row) for row in _User.select().dicts()]
 
     @staticmethod
     def get_config(userid: str | None) -> dict[str, str] | None:
@@ -977,7 +748,11 @@ class User:
         if not userid or not password:
             return None
         user = _User.get_or_none(_User.userid == userid)
-        if user is None or not verify_password(password, user.password):
+        if (
+            user is None
+            or user.status != USER_ACTIVE
+            or not verify_password(password, user.password_hash)
+        ):
             return None
         key = generate_sk_key(16)
         expires = (
@@ -1020,7 +795,8 @@ class User:
             if new_password:
                 if not is_valid_password(new_password):
                     return False
-                user.password = hash_password(new_password)
+                user.password_hash = hash_password(new_password)
+            user.updated_at = now_str()
             user.save()
             return True
         return False
@@ -1085,7 +861,25 @@ class User:
                 user = _User.get_or_none(_User.userid == userid)
                 if not user:
                     return False
-                user.delete_instance()
+                with db.atomic():
+                    # 逻辑外键的附属数据要应用层清理（v1 是留孤儿）：
+                    # 会话、点赞、收藏、草稿（含草稿标签）。文章不删，
+                    # 作者列是逻辑外键，历史内容仍以「已注销」展示。
+                    _Session.delete().where(_Session.user_id == userid).execute()
+                    _Like.delete().where(_Like.user_id == userid).execute()
+                    _Bookmark.delete().where(_Bookmark.user_id == userid).execute()
+                    draft_ids = [
+                        row["id"]
+                        for row in _Draft.select(_Draft.id)
+                        .where(_Draft.user_id == userid)
+                        .dicts()
+                    ]
+                    if draft_ids:
+                        _DraftTag.delete().where(
+                            _DraftTag.draft.in_(draft_ids)
+                        ).execute()
+                    _Draft.delete().where(_Draft.user_id == userid).execute()
+                    user.delete_instance()
                 return True
             except Exception:
                 return False
@@ -1098,10 +892,38 @@ def _sync_tags(post_id: int, tags: typing.Iterable[str] | None) -> None:
         name = (name or "").strip()
         if name and name not in names:
             names.append(name)
-    _PostTag.delete().where(_PostTag.post == post_id).execute()
+    with db.atomic():
+        old_ids = [
+            row["tag"]
+            for row in _PostTag.select(_PostTag.tag)
+            .where(_PostTag.post == post_id)
+            .dicts()
+        ]
+        _PostTag.delete().where(_PostTag.post == post_id).execute()
+        # 标签计数：旧集合 -1，新集合 +1（同一事务内完成）
+        for tag_id in old_ids:
+            _Tag.update(usage_count=_Tag.usage_count - 1).where(
+                _Tag.id == tag_id
+            ).execute()
+        for position, name in enumerate(names):
+            tag, _created = _Tag.get_or_create(name=name)
+            _Tag.update(usage_count=_Tag.usage_count + 1).where(
+                _Tag.id == tag.id
+            ).execute()
+            _PostTag.create(post=post_id, tag=tag, position=position)
+
+
+def _sync_draft_tags(draft_id: int, tags: typing.Iterable[str] | None) -> None:
+    """整体替换草稿标签（与文章标签同构，但不维护 usage_count：草稿不算正式发布）。"""
+    names: list[str] = []
+    for name in tags or []:
+        name = (name or "").strip()
+        if name and name not in names:
+            names.append(name)
+    _DraftTag.delete().where(_DraftTag.draft == draft_id).execute()
     for position, name in enumerate(names):
         tag, _ = _Tag.get_or_create(name=name)
-        _PostTag.create(post=post_id, tag=tag, position=position)
+        _DraftTag.create(draft=draft_id, tag=tag, position=position)
 
 
 def _sync_attachments(post_id: int, attachments: typing.Iterable[dict]) -> None:
@@ -1116,6 +938,8 @@ def _sync_attachments(post_id: int, attachments: typing.Iterable[dict]) -> None:
             stored_name=stored_name,
             mime=att.get("type") or "",
             size=int(att.get("size") or 0),
+            sha256=att.get("sha256") or "",
+            is_image=1 if (att.get("type") or "").startswith("image/") else 0,
             created_at=now_str(),
         )
 
@@ -1149,12 +973,16 @@ class Post:
     ) -> int:
         """发布文章，返回新文章 ID（附件与标签在同一事务内写入）。"""
         print(f"{authorid}发布了新文章：{title}")
+        author = _User.get_or_none(_User.userid == authorid)
         with db.atomic():
             post = _Post.create(
                 author_id=authorid,
+                # 作者名快照：作者注销/改名后，历史文章的署名仍可还原
+                author_name=author.username if author else "",
                 title=title,
                 content=content,
                 created_at=now_str(),
+                updated_at=now_str(),
                 attpassword=sha256(attpassword) if attpassword else "",
             )
             _sync_attachments(post.id, attachments)
@@ -1168,14 +996,25 @@ class Post:
         评论 / 点赞 / 收藏 / 标签 / 附件由外键级联清理（v1 需手工删评论，其余会留孤儿）；
         磁盘上的附件文件不在这里删，留给管理后台的「孤立附件清理」。
         """
-        return _Post.delete().where(_Post.id == postid).execute() > 0
+        with db.atomic():
+            tag_ids = [
+                row["tag"]
+                for row in _PostTag.select(_PostTag.tag)
+                .where(_PostTag.post == postid)
+                .dicts()
+            ]
+            for tag_id in tag_ids:
+                _Tag.update(usage_count=_Tag.usage_count - 1).where(
+                    _Tag.id == tag_id
+                ).execute()
+            return _Post.delete().where(_Post.id == postid).execute() > 0
 
     @staticmethod
     def edit(postid: int, title: str, content: str, tags: typing.List[str] = None) -> bool:
         """编辑文章标题 / 正文 / 标签。"""
         with db.atomic():
             updated = (
-                _Post.update(title=title, content=content)
+                _Post.update(title=title, content=content, updated_at=now_str())
                 .where(_Post.id == postid)
                 .execute()
             )
@@ -1357,11 +1196,14 @@ class Post:
         with db.atomic():
             if _Post.get_or_none(_Post.id == postid) is None:
                 return None
+            author = _User.get_or_none(_User.userid == userid)
             comment = _Comment.create(
                 post=postid,
                 user_id=userid,
+                author_name=author.username if author else "",
                 content=content,
                 created_at=now_str(),
+                updated_at=now_str(),
             )
             _Post.update(comment_count=_Post.comment_count + 1).where(
                 _Post.id == postid
@@ -1374,7 +1216,12 @@ class Post:
         cid = _comment_id_at(postid, comment_index)
         if cid is None:
             return False
-        return _Comment.update(content=content).where(_Comment.id == cid).execute() > 0
+        return (
+            _Comment.update(content=content, updated_at=now_str())
+            .where(_Comment.id == cid)
+            .execute()
+            > 0
+        )
 
     @staticmethod
     def delete_comment(postid: int, comment_index: int) -> bool:
@@ -1479,11 +1326,14 @@ class Attachment:
             f.write(file_bytes)
 
         # 返回元数据（不包含文件内容，只存路径）
+        mime = uploaded_file.type or ""
         return {
             "original_name": uploaded_file.name,  # 原始文件名
             "saved_name": unique_name,  # 存储在磁盘的文件名
-            "type": uploaded_file.type,  # MIME 类型（如 image/png）
+            "type": mime,  # MIME 类型（如 image/png）
             "size": size,  # 文件大小（字节，按实际字节数而非声明值）
+            "sha256": hashlib.sha256(file_bytes).hexdigest(),  # 内容指纹（去重/校验）
+            "is_image": mime.startswith("image/"),  # 便于列表页判断要不要出图
             "path": unique_name,  # 相对路径（用于读取时拼接）
         }
 
@@ -1661,10 +1511,16 @@ class Report:
         reason = (reason or "").strip()
         if not reason:
             return None
+        is_comment = commentid is not None
+        target_id = int(commentid) if is_comment else int(postid or 0)
+        if not target_id:
+            return None
         try:
             return _Report.create(
+                # 举报对象：评论 / 文章。post_id 只是上下文（评论所属文章）
+                target_type=TARGET_COMMENT if is_comment else TARGET_POST,
+                target_id=target_id,
                 post_id=postid,
-                comment_id=commentid,
                 target_user_id=target_userid,
                 reporter_id=reporter_userid,
                 content_preview=(content_preview or "")[:500],
@@ -1742,22 +1598,25 @@ class Draft:
                 return None
             d.title = title
             d.content = content
-            if tags is not None:
-                d.tags = tags
             if attpassword is not None:
                 d.attpassword = attpassword
             d.updated_at = now
-            d.save()
+            with db.atomic():
+                d.save()
+                if tags is not None:
+                    _sync_draft_tags(d.id, tags)
             return d.id
-        return _Draft.create(
-            user_id=userid,
-            title=title,
-            content=content,
-            tags=tags or [],
-            attpassword=attpassword,
-            created_at=now,
-            updated_at=now,
-        ).id
+        with db.atomic():
+            draft = _Draft.create(
+                user_id=userid,
+                title=title,
+                content=content,
+                attpassword=attpassword,
+                created_at=now,
+                updated_at=now,
+            )
+            _sync_draft_tags(draft.id, tags)
+        return draft.id
 
     @staticmethod
     def get_drafts(userid: str) -> list[dict]:
@@ -1768,7 +1627,8 @@ class Draft:
             .order_by(_Draft.id.desc())
             .dicts()
         )
-        return [_draft_dict(row) for row in rows]
+        tag_map = _draft_tag_map(row["id"] for row in rows)
+        return [_draft_dict(row, tag_map.get(row["id"])) for row in rows]
 
     @staticmethod
     def get_draft(userid: str, draft_id: int) -> dict | None:
@@ -1779,7 +1639,9 @@ class Draft:
             .dicts()
             .get_or_none()
         )
-        return _draft_dict(row) if row else None
+        if not row:
+            return None
+        return _draft_dict(row, _draft_tag_map([row["id"]]).get(row["id"]))
 
     @staticmethod
     def delete(userid: str, draft_id: int) -> bool:

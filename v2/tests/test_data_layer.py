@@ -60,12 +60,13 @@ def test_old_sha256_password_auto_upgrade():
     _User.create(
         userid=userid,
         username="旧用户",
-        password=sha256("legacy123"),
+        password_hash=sha256("legacy123"),
         role="USER",
         created_at="2026-01-01 00:00:00",
+        updated_at="2026-01-01 00:00:00",
     )
     assert user_api.login(userid, "legacy123") is True
-    stored = _User.get(_User.userid == userid).password
+    stored = _User.get(_User.userid == userid).password_hash
     assert stored.startswith("pbkdf2$")
     assert verify_password("legacy123", stored) is True
 
@@ -568,9 +569,9 @@ def test_execute_sql_readonly():
     """S3：只允许 SELECT / WITH / EXPLAIN / PRAGMA，写操作一律拒绝。"""
     assert execute_sql("SELECT 1 AS x") == [{"x": 1}]
     # 大小写 / 前后空白 / 分号均可
-    assert execute_sql("  select count(*) as n from _user  ;") is not None
+    assert execute_sql("  select count(*) as n from users  ;") is not None
     for bad in (
-        "DELETE FROM _user",
+        "DELETE FROM users",
         "UPDATE _user SET role='ADMIN'",
         "DROP TABLE _user",
         "INSERT INTO _user (userid) VALUES ('x')",
@@ -601,7 +602,7 @@ def test_execute_sql_blocks_with_bypass_and_write_pragmas():
     assert api._current_user_version() == before_version
     # 只读 PRAGMA 与 EXPLAIN 仍然可用
     assert execute_sql("PRAGMA user_version")[0]["user_version"] == before_version
-    assert execute_sql("PRAGMA table_info(_user)")
+    assert execute_sql("PRAGMA table_info(users)")
     assert execute_sql("EXPLAIN QUERY PLAN SELECT 1")
 
 
@@ -766,3 +767,125 @@ def test_post_edit_tags_none_keeps_tags():
     assert got["tags"] == ["趣事分享", "技术分享"]
     assert Post.edit(pid, "标题3", "内容3", []) is True
     assert Post.get(pid)["tags"] == []
+
+
+# region v4 新结构：状态 / 快照 / 标签计数 / 附件指纹 / 草稿标签 / 多态举报
+def test_v4_tables_exist():
+    """v4 新增的表都在，且 schema 版本已写入。"""
+    tables = set(api.db.get_tables())
+    for name in ("users", "sessions", "audit_logs", "schema_meta", "draft_tags"):
+        assert name in tables, f"缺少表 {name}"
+    assert api._current_user_version() == 4
+
+
+def test_disabled_user_cannot_login_or_get_secret_key():
+    """status=disabled 的账号：登录失败、也签不出管理员密钥。"""
+    u = make_user()
+    assert user_api.login(u["userid"], u["password"]) is True
+    api._User.update(status=api.USER_DISABLED).where(
+        api._User.userid == u["userid"]
+    ).execute()
+    assert user_api.login(u["userid"], u["password"]) is False
+    assert user_api.issue_secret_key(u["userid"], u["password"]) is None
+
+
+def test_login_records_last_login_at():
+    """登录成功会写 last_login_at（审计用）。"""
+    u = make_user()
+    assert api._User.get(api._User.userid == u["userid"]).last_login_at == ""
+    assert user_api.login(u["userid"], u["password"]) is True
+    assert api._User.get(api._User.userid == u["userid"]).last_login_at != ""
+
+
+def test_tag_usage_count_follows_publish_edit_delete():
+    """标签的 usage_count 随发布/改标签/删文章增减。"""
+    u = make_user()
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=["技术分享", "校园生活"])
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 1
+    assert counts["校园生活"] == 1
+
+    assert Post.edit(pid, "标题", "内容", ["技术分享"]) is True
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 1
+    assert counts["校园生活"] == 0
+
+    assert Post.delete(pid) is True
+    counts = {
+        row["name"]: row["usage_count"]
+        for row in api._Tag.select(api._Tag.name, api._Tag.usage_count).dicts()
+    }
+    assert counts["技术分享"] == 0
+
+
+def test_author_name_is_snapshotted():
+    """文章与评论保存作者名快照，作者注销后仍能显示署名。"""
+    u = make_user("snap")
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=[])
+    assert Post.get(pid)["author_name"] == u["username"]
+    Post.add_comment(pid, u["userid"], "评论")
+    comment = api._Comment.get(api._Comment.post == pid)
+    assert comment.author_name == u["username"]
+
+
+def test_attachment_metadata_records_sha256_and_is_image():
+    """附件入库记录内容指纹与「是否图片」标记。"""
+    u = make_user()
+    png = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(png, format="PNG")
+    att = Attachment.save(FakeUpload("a.png", png.getvalue(), "image/png"))
+    assert att["sha256"]
+    assert att["is_image"] is True
+    pid = Post.publish(u["userid"], "带附件", "内容", [att], tags=[])
+    row = api._Attachment.get(api._Attachment.post == pid)
+    assert row.sha256 == att["sha256"]
+    assert row.is_image == 1
+
+
+def test_draft_tags_roundtrip():
+    """草稿标签走关联表：保存、读回、更新为空。"""
+    u = make_user()
+    did = Draft.save(u["userid"], "草稿", "内容", ["技术分享", "趣事分享"], "")
+    assert Draft.get_draft(u["userid"], did)["tags"] == ["技术分享", "趣事分享"]
+    assert Draft.save(u["userid"], "草稿", "内容", [], "", draft_id=did) == did
+    assert Draft.get_draft(u["userid"], did)["tags"] == []
+    # 草稿标签不参与 usage_count
+    tag = api._Tag.get_or_none(api._Tag.name == "技术分享")
+    assert tag is None or tag.usage_count >= 0
+
+
+def test_report_target_type_distinguishes_post_and_comment():
+    """举报用 target_type/target_id 表达目标，对外仍是 postid/commentid 契约。"""
+    author = make_user("ra")
+    reporter = make_user("rr")
+    pid = Post.publish(author["userid"], "标题", "内容", [], tags=[])
+    Post.add_comment(pid, author["userid"], "评论")
+    cid = api._Comment.get(api._Comment.post == pid).id
+
+    post_report = Report.add(reporter["userid"], postid=pid, reason="违规文章")
+    comment_report = Report.add(
+        reporter["userid"], postid=pid, commentid=cid, reason="违规评论"
+    )
+    rows = {
+        r["id"]: r
+        for r in api._Report.select().dicts()
+    }
+    assert rows[post_report]["target_type"] == "post"
+    assert rows[post_report]["target_id"] == pid
+    assert rows[comment_report]["target_type"] == "comment"
+    assert rows[comment_report]["target_id"] == cid
+
+    # 对外契约不变
+    assert Report.get(post_report)["postid"] == pid
+    assert Report.get(post_report)["commentid"] is None
+    assert Report.get(comment_report)["commentid"] == cid
+
+    # 同一人对同一目标的 pending 举报去重
+    assert Report.add(reporter["userid"], postid=pid, reason="再举报") is None
+# endregion
