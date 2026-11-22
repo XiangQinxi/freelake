@@ -9,6 +9,7 @@
 import streamlit as st
 
 from api import Post, Report
+from const import tags as _TAGS
 
 state = st.session_state
 
@@ -44,8 +45,8 @@ def edit_post(post):
     )
     new_tags = st.multiselect(
         "标签",
-        tags,
-        default=[t for t in (post["tags"] or []) if t in tags],
+        _TAGS,
+        default=[t for t in (post["tags"] or []) if t in _TAGS],
         accept_new_options=False,
     )
     if st.button("提交修改"):
@@ -63,9 +64,7 @@ def edit_post(post):
 
 @st.dialog("编辑评论")
 def edit_comment_dialog(post_id, comment_index, current_content):
-    new_content = st.text_area(
-        "评论内容", value=current_content, label_visibility="collapsed"
-    )
+    new_content = st.text_area("评论内容", value=current_content, label_visibility="collapsed")
     if st.button("保存修改", type="primary"):
         if not new_content.strip():
             st.error("评论内容不能为空！")

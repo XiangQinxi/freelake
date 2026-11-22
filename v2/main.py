@@ -19,6 +19,7 @@ Streamlit 论坛应用的主入口脚本，负责：
   ``api2.check_by_state`` 每次直接查库校验。
 """
 
+import logging
 import os
 import secrets
 
@@ -34,6 +35,9 @@ from streamlit_cookies_manager import EncryptedCookieManager
 from api import User, resolve_session
 from api2 import check_by_state
 from const import admin
+from freelake.logging_setup import configure_logging
+
+configure_logging(logging.INFO)
 
 
 def _secrets_get(key, default=None):
@@ -67,9 +71,7 @@ if "role" not in state:
 # 安全：绝不使用硬编码/公开的兜底密钥（等同于把解密密钥写进仓库）。
 # 未配置时退化为「进程级随机密钥」——攻击者不可知，因此漏洞关闭；
 # 代价是服务重启（或多进程部署）后所有人需要重新登录，并会看到醒目提示。
-_cookie_password = os.environ.get("COOKIES_PASSWORD") or _secrets_get(
-    "cookies", {}
-).get("password")
+_cookie_password = os.environ.get("COOKIES_PASSWORD") or _secrets_get("cookies", {}).get("password")
 if not _cookie_password:
     _cookie_password = secrets.token_urlsafe(32)
     st.warning(
@@ -194,9 +196,7 @@ login_page = st.Page("pages/login.py", title=":material/login: 登录")
 register_page = st.Page("pages/register.py", title=":material/person: 注册")
 logout_page = st.Page("pages/logout.py", title=":material/logout: 退出登录")
 admin_page = st.Page("pages/admin.py", title=":material/security: 管理员页面")
-image_generate_page = st.Page(
-    "pages/image_generate.py", title=":material/auto_awesome: 图片生成"
-)
+image_generate_page = st.Page("pages/image_generate.py", title=":material/auto_awesome: 图片生成")
 
 # ---- 按登录状态与角色组装「账号」导航组 ----
 user = User()

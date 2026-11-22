@@ -18,8 +18,19 @@ from conftest import FakeUpload
 from PIL import Image
 
 import api
-from api import (Attachment, Bookmark, Draft, Like, Post, Report, User,
-                 execute_sql, hash_password, sha256, verify_password)
+from api import (
+    Attachment,
+    Bookmark,
+    Draft,
+    Like,
+    Post,
+    Report,
+    User,
+    execute_sql,
+    hash_password,
+    sha256,
+    verify_password,
+)
 
 user_api = User()
 
@@ -90,18 +101,12 @@ def test_change_password_requires_original():
     assert user_api.check(u["userid"], "wrong-original") is False
     # 原密码错误 → 拒绝，密码保持原样
     assert (
-        user_api.modify(
-            u["userid"], password="wrong-original", new_password="newpass123"
-        )
-        is False
+        user_api.modify(u["userid"], password="wrong-original", new_password="newpass123") is False
     )
     assert user_api.login(u["userid"], u["password"]) is True
     assert user_api.login(u["userid"], "newpass123") is False
     # 原密码正确 → 允许
-    assert (
-        user_api.modify(u["userid"], password=u["password"], new_password="newpass123")
-        is True
-    )
+    assert user_api.modify(u["userid"], password=u["password"], new_password="newpass123") is True
     assert user_api.login(u["userid"], "newpass123") is True
 
 
@@ -277,24 +282,18 @@ def test_get_filtered_paginate_sort():
     api._Post.update(views=10).where(api._Post.id == p1).execute()
     api._Post.update(views=30).where(api._Post.id == p2).execute()
     api._Post.update(views=20).where(api._Post.id == p3).execute()
-    views_sorted = [
-        p["id"] for p in Post.get_filtered_paginate(sort_by="views", page_size=10)
-    ]
+    views_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="views", page_size=10)]
     assert views_sorted == [p2, p3, p1]
 
     # 日期（默认）：最新在前
-    date_sorted = [
-        p["id"] for p in Post.get_filtered_paginate(sort_by="date", page_size=10)
-    ]
+    date_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="date", page_size=10)]
     assert date_sorted == sorted([p1, p2, p3], reverse=True)
 
     # 点赞量：p3=2 > p2=1 > p1=0
     Like.toggle(p2, a["userid"])
     Like.toggle(p3, a["userid"])
     Like.toggle(p3, b["userid"])
-    likes_sorted = [
-        p["id"] for p in Post.get_filtered_paginate(sort_by="likes", page_size=10)
-    ]
+    likes_sorted = [p["id"] for p in Post.get_filtered_paginate(sort_by="likes", page_size=10)]
     assert likes_sorted == [p3, p2, p1]
 
     # 收藏量：p1=1 排在其余（0）之前
@@ -470,6 +469,8 @@ def test_count_filtered_by_author():
     # 与关键词组合
     assert Post.count_filtered(keyword="文章一", author=a["userid"]) == 1
     assert {p["id"] for p in Post.get_filtered_paginate(author=a["userid"])} == {p1, p2}
+    # B 的文章不该出现在 A 的筛选结果里
+    assert p3 not in {p["id"] for p in Post.get_filtered_paginate(author=a["userid"])}
 
 
 def test_get_author_stats():
@@ -479,6 +480,7 @@ def test_get_author_stats():
     b = make_user("fan")
     pid = Post.publish(a["userid"], "标题", "内容", [])
     p2 = Post.publish(a["userid"], "标题二", "内容", [])
+    assert p2 != pid
     api._Post.update(views=10).where(api._Post.id == pid).execute()
     Like.toggle(pid, b["userid"])
     Bookmark.toggle(pid, b["userid"])
@@ -507,9 +509,7 @@ def test_draft_save_load_delete():
     assert d["tags"] == ["趣事分享"]
 
     # 更新已有草稿
-    d2 = Draft.save(
-        u["userid"], "新标题", "新内容", ["技术分享"], "pw456", draft_id=did
-    )
+    d2 = Draft.save(u["userid"], "新标题", "新内容", ["技术分享"], "pw456", draft_id=did)
     assert d2 == did
     assert Draft.get_draft(u["userid"], did)["title"] == "新标题"
 
@@ -647,9 +647,10 @@ def test_role_escalation_requires_admin_secret_key():
     key = user_api.issue_secret_key(admin_user["userid"], admin_user["password"])
     assert user_api.set_role(key, victim["userid"], "ROOT") is False
     # 真实管理员密钥才成功（测试里把它临时提成 ADMIN）
-    assert api._User.update(role="ADMIN").where(
-        api._User.userid == admin_user["userid"]
-    ).execute() == 1
+    assert (
+        api._User.update(role="ADMIN").where(api._User.userid == admin_user["userid"]).execute()
+        == 1
+    )
     assert user_api.set_role(key, victim["userid"], "ADMIN") is True
     assert user_api.get_config(victim["userid"])["role"] == "ADMIN"
 
@@ -723,8 +724,11 @@ def test_report_handle_only_pending():
     u2 = make_user("r")
     pid = Post.publish(u["userid"], "t", "c", [])
     rid = Report.add(
-        u2["userid"], postid=pid, target_userid=u["userid"],
-        content_preview="t", reason="x",
+        u2["userid"],
+        postid=pid,
+        target_userid=u["userid"],
+        content_preview="t",
+        reason="x",
     )
     assert Report.handle(rid, "admin-1", "handled", "已处理") is True
     assert Report.handle(rid, "admin-2", "dismissed", "再改一次") is False
@@ -740,9 +744,7 @@ def test_draft_save_rejects_foreign_draft_id():
     did = Draft.save(owner["userid"], "原标题", "原内容", ["趣事分享"], "pw")
     assert did is not None
 
-    assert (
-        Draft.save(attacker["userid"], "劫持", "劫持", [], "", draft_id=did) is None
-    )
+    assert Draft.save(attacker["userid"], "劫持", "劫持", [], "", draft_id=did) is None
     # attacker 名下没有新增草稿，owner 的草稿也没被改
     assert Draft.count(attacker["userid"]) == 0
     assert Draft.count(owner["userid"]) == 1
@@ -758,9 +760,7 @@ def test_draft_save_rejects_foreign_draft_id():
 def test_post_edit_tags_none_keeps_tags():
     """Post.edit(tags=None) 表示「不动标签」，[] 才是清空。"""
     u = make_user()
-    pid = Post.publish(
-        u["userid"], "标题", "内容", [], tags=["趣事分享", "技术分享"]
-    )
+    pid = Post.publish(u["userid"], "标题", "内容", [], tags=["趣事分享", "技术分享"])
     assert Post.edit(pid, "标题2", "内容2", None) is True
     got = Post.get(pid)
     assert got["title"] == "标题2"
@@ -782,9 +782,7 @@ def test_disabled_user_cannot_login_or_get_secret_key():
     """status=disabled 的账号：登录失败、也签不出管理员密钥。"""
     u = make_user()
     assert user_api.login(u["userid"], u["password"]) is True
-    api._User.update(status=api.USER_DISABLED).where(
-        api._User.userid == u["userid"]
-    ).execute()
+    api._User.update(status=api.USER_DISABLED).where(api._User.userid == u["userid"]).execute()
     assert user_api.login(u["userid"], u["password"]) is False
     assert user_api.issue_secret_key(u["userid"], u["password"]) is None
 
@@ -869,13 +867,8 @@ def test_report_target_type_distinguishes_post_and_comment():
     cid = api._Comment.get(api._Comment.post == pid).id
 
     post_report = Report.add(reporter["userid"], postid=pid, reason="违规文章")
-    comment_report = Report.add(
-        reporter["userid"], postid=pid, commentid=cid, reason="违规评论"
-    )
-    rows = {
-        r["id"]: r
-        for r in api._Report.select().dicts()
-    }
+    comment_report = Report.add(reporter["userid"], postid=pid, commentid=cid, reason="违规评论")
+    rows = {r["id"]: r for r in api._Report.select().dicts()}
     assert rows[post_report]["target_type"] == "post"
     assert rows[post_report]["target_id"] == pid
     assert rows[comment_report]["target_type"] == "comment"
@@ -888,6 +881,8 @@ def test_report_target_type_distinguishes_post_and_comment():
 
     # 同一人对同一目标的 pending 举报去重
     assert Report.add(reporter["userid"], postid=pid, reason="再举报") is None
+
+
 # endregion
 
 
@@ -925,9 +920,7 @@ def test_session_rejects_expired_and_disabled():
 
     alive = api.create_session("sess_exp")
     assert api.resolve_session(alive) is not None
-    api._User.update(status=api.USER_DISABLED).where(
-        api._User.userid == "sess_exp"
-    ).execute()
+    api._User.update(status=api.USER_DISABLED).where(api._User.userid == "sess_exp").execute()
     assert api.resolve_session(alive) is None
     # 被禁用的用户也不能登录/签发
     assert api.create_session("sess_exp") == ""

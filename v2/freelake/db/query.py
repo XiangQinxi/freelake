@@ -13,6 +13,7 @@ from peewee import DatabaseError
 from freelake.config import SENSITIVE_COLUMNS
 from freelake.db.connection import db
 
+
 def mask_sensitive_rows(rows: list[dict]) -> list[dict]:
     """把结果集中的敏感列替换为 `***`：后台「只读 SQL」展示前必须过一遍。
 
@@ -20,10 +21,7 @@ def mask_sensitive_rows(rows: list[dict]) -> list[dict]:
     直接渲染在页面上（肩窥 / 投屏 / 截图都会泄露），因此展示层脱敏。
     """
     return [
-        {
-            key: ("***" if key.lower() in SENSITIVE_COLUMNS else value)
-            for key, value in row.items()
-        }
+        {key: ("***" if key.lower() in SENSITIVE_COLUMNS else value) for key, value in row.items()}
         for row in rows
     ]
 
@@ -144,10 +142,8 @@ def execute_sql(query: str) -> list[dict[str, str]]:
     try:
         cursor = db.execute_sql(stripped)
         columns = [col[0] for col in cursor.description or ()]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
     except DatabaseError as exc:  # authorizer 拒绝时驱动抛 DatabaseError
         raise ValueError(f"只允许只读查询（{exc}）") from exc
     finally:
         conn.set_authorizer(None)
-
-

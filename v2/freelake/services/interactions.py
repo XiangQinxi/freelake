@@ -11,12 +11,21 @@ from freelake.db.connection import UNIQUE_VIOLATION, db
 from freelake.db.models import (
     TARGET_COMMENT,
     TARGET_POST,
-    BookmarkModel as _Bookmark,
-    LikeModel as _Like,
-    PostModel as _Post,
-    ReportModel as _Report,
     now_str,
 )
+from freelake.db.models import (
+    BookmarkModel as _Bookmark,
+)
+from freelake.db.models import (
+    LikeModel as _Like,
+)
+from freelake.db.models import (
+    PostModel as _Post,
+)
+from freelake.db.models import (
+    ReportModel as _Report,
+)
+
 
 class Like:
     """文章点赞：同一用户对同一文章只能点一次（主键 post_id + user_id 保证）。
@@ -29,9 +38,7 @@ class Like:
         """切换点赞状态，返回点赞后的状态（True = 已点赞）。"""
         try:
             with db.atomic():
-                like = _Like.get_or_none(
-                    (_Like.post == postid) & (_Like.user_id == userid)
-                )
+                like = _Like.get_or_none((_Like.post == postid) & (_Like.user_id == userid))
                 if like:
                     like.delete_instance()
                     _Post.update(like_count=_Post.like_count - 1).where(
@@ -39,9 +46,7 @@ class Like:
                     ).execute()
                     return False
                 _Like.create(post=postid, user_id=userid, created_at=now_str())
-                _Post.update(like_count=_Post.like_count + 1).where(
-                    _Post.id == postid
-                ).execute()
+                _Post.update(like_count=_Post.like_count + 1).where(_Post.id == postid).execute()
                 return True
         except UNIQUE_VIOLATION:
             # 文章已被删除：外键拒绝写入
@@ -50,15 +55,13 @@ class Like:
     @staticmethod
     def is_liked(postid: int, userid: str) -> bool:
         """用户是否已点赞该文章。"""
-        return (
-            _Like.get_or_none((_Like.post == postid) & (_Like.user_id == userid))
-            is not None
-        )
+        return _Like.get_or_none((_Like.post == postid) & (_Like.user_id == userid)) is not None
 
     @staticmethod
     def count(postid: int) -> int:
         """文章的点赞总数（读 _post 冗余计数器，主键点查）。"""
         return _Post.select(_Post.like_count).where(_Post.id == postid).scalar() or 0
+
 
 class Bookmark:
     """文章收藏：同一用户对同一文章只能收藏一次（主键 post_id + user_id 保证）。"""
@@ -89,18 +92,14 @@ class Bookmark:
     def is_bookmarked(postid: int, userid: str) -> bool:
         """用户是否已收藏该文章。"""
         return (
-            _Bookmark.get_or_none(
-                (_Bookmark.post == postid) & (_Bookmark.user_id == userid)
-            )
+            _Bookmark.get_or_none((_Bookmark.post == postid) & (_Bookmark.user_id == userid))
             is not None
         )
 
     @staticmethod
     def count(postid: int) -> int:
         """文章的收藏总数（读 _post 冗余计数器）。"""
-        return (
-            _Post.select(_Post.bookmark_count).where(_Post.id == postid).scalar() or 0
-        )
+        return _Post.select(_Post.bookmark_count).where(_Post.id == postid).scalar() or 0
 
     @staticmethod
     def get_bookmarked_post_ids(userid: str) -> list[int]:
@@ -112,6 +111,7 @@ class Bookmark:
             .order_by(_Bookmark.created_at.desc())
             .dicts()
         ]
+
 
 class Report:
     """举报：用户可举报文章或评论，管理员在后台受理处理。

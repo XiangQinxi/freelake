@@ -23,26 +23,42 @@ import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
+from api import (
+    ATTACHMENTS_DIR,
+    Post,
+    Report,
+    User,
+    delete_comment_by_id,
+    delete_orphaned_attachments,
+    delete_orphaned_comments,
+    execute_sql,
+    export_comments_csv,
+    export_comments_json,
+    export_posts_csv,
+    export_posts_json,
+    export_users_csv,
+    export_users_json,
+    format_size,
+    get_all_attachments,
+    get_attachment_stats,
+    get_comment_summary,
+    get_orphaned_attachments,
+    get_orphaned_comments,
+    mask_sensitive_rows,
+    search_comments,
+    sha256,
+)
 from const import admin as ROLE_ADMIN
-from api import (ATTACHMENTS_DIR, Post, Report, User, delete_comment_by_id,
-                 delete_orphaned_attachments, delete_orphaned_comments,
-                 execute_sql, export_comments_csv, export_comments_json,
-                 export_posts_csv, export_posts_json, export_users_csv,
-                 export_users_json, format_size, get_all_attachments,
-                 get_attachment_stats, get_comment_summary,
-                 get_orphaned_attachments, get_orphaned_comments,
-                 mask_sensitive_rows, search_comments, sha256)
 
 st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
 
 st.subheader(":material/security: 管理后台")
 state = st.session_state
 
+
 def _bump_admin_data() -> None:
     """数据变更后让后台快照失效（版本号参与缓存键）。"""
-    st.session_state["_admin_data_ver"] = (
-        st.session_state.get("_admin_data_ver", 0) + 1
-    )
+    st.session_state["_admin_data_ver"] = st.session_state.get("_admin_data_ver", 0) + 1
 
 
 def _refresh() -> None:
@@ -107,9 +123,7 @@ _reauth_gate()
 with st.expander("统计概览", expanded=True):
     user = User()
     post = Post()
-    posts_all, users_all, all_comments, stats = _admin_snapshot(
-        state.get("_admin_data_ver", 0)
-    )
+    posts_all, users_all, all_comments, stats = _admin_snapshot(state.get("_admin_data_ver", 0))
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("用户总数", user.count())
     col2.metric("文章总数", post.count())
@@ -143,69 +157,63 @@ with st.expander("数据图表", expanded=True):
     comments_all = all_comments
 
     c1, c2 = st.columns(2)
-    with c1:
-        with st.container(border=True):
-            st.subheader("文章发布趋势")
-            df = _daily_counts(posts_all)
-            if df.empty:
-                st.info("暂无文章数据", icon=":material/bar_chart:")
-            else:
-                st.area_chart(df, x="日期", y="数量")
-    with c2:
-        with st.container(border=True):
-            st.subheader("评论发表趋势")
-            df = _daily_counts(comments_all)
-            if df.empty:
-                st.info("暂无评论数据", icon=":material/bar_chart:")
-            else:
-                st.line_chart(df, x="日期", y="数量")
+    with c1, st.container(border=True):
+        st.subheader("文章发布趋势")
+        df = _daily_counts(posts_all)
+        if df.empty:
+            st.info("暂无文章数据", icon=":material/bar_chart:")
+        else:
+            st.area_chart(df, x="日期", y="数量")
+    with c2, st.container(border=True):
+        st.subheader("评论发表趋势")
+        df = _daily_counts(comments_all)
+        if df.empty:
+            st.info("暂无评论数据", icon=":material/bar_chart:")
+        else:
+            st.line_chart(df, x="日期", y="数量")
 
     c3, c4 = st.columns(2)
-    with c3:
-        with st.container(border=True):
-            st.subheader("用户注册趋势")
-            df = _daily_counts(users_all)
-            if df.empty:
-                st.info("暂无用户数据", icon=":material/bar_chart:")
-            else:
-                st.area_chart(df, x="日期", y="数量")
-    with c4:
-        with st.container(border=True):
-            st.subheader("文章标签分布")
-            flat_tags = [t for p in posts_all for t in (p.get("tags") or [])]
-            if not flat_tags:
-                st.info("暂无标签数据", icon=":material/bar_chart:")
-            else:
-                tag_df = pd.Series(flat_tags).value_counts().reset_index()
-                tag_df.columns = ["标签", "数量"]
-                st.bar_chart(tag_df, x="标签", y="数量")
+    with c3, st.container(border=True):
+        st.subheader("用户注册趋势")
+        df = _daily_counts(users_all)
+        if df.empty:
+            st.info("暂无用户数据", icon=":material/bar_chart:")
+        else:
+            st.area_chart(df, x="日期", y="数量")
+    with c4, st.container(border=True):
+        st.subheader("文章标签分布")
+        flat_tags = [t for p in posts_all for t in (p.get("tags") or [])]
+        if not flat_tags:
+            st.info("暂无标签数据", icon=":material/bar_chart:")
+        else:
+            tag_df = pd.Series(flat_tags).value_counts().reset_index()
+            tag_df.columns = ["标签", "数量"]
+            st.bar_chart(tag_df, x="标签", y="数量")
 
     c5, c6 = st.columns(2)
-    with c5:
-        with st.container(border=True):
-            st.subheader("文章作者 Top 10")
-            authors = [p["authorid"] for p in posts_all]
-            if not authors:
-                st.info("暂无文章数据", icon=":material/bar_chart:")
-            else:
-                author_df = pd.Series(authors).value_counts().head(10).reset_index()
-                author_df.columns = ["作者", "文章数"]
-                st.bar_chart(author_df, x="作者", y="文章数", horizontal=True)
-    with c6:
-        with st.container(border=True):
-            st.subheader("用户角色分布")
-            roles = [u["role"] for u in users_all]
-            if not roles:
-                st.info("暂无用户数据", icon=":material/bar_chart:")
-            else:
-                role_df = pd.Series(roles).value_counts().reset_index()
-                role_df.columns = ["角色", "用户数"]
-                role_chart = (
-                    alt.Chart(role_df)
-                    .mark_arc(innerRadius=45)
-                    .encode(theta="用户数:Q", color=alt.Color("角色:N"))
-                )
-                st.altair_chart(role_chart)
+    with c5, st.container(border=True):
+        st.subheader("文章作者 Top 10")
+        authors = [p["authorid"] for p in posts_all]
+        if not authors:
+            st.info("暂无文章数据", icon=":material/bar_chart:")
+        else:
+            author_df = pd.Series(authors).value_counts().head(10).reset_index()
+            author_df.columns = ["作者", "文章数"]
+            st.bar_chart(author_df, x="作者", y="文章数", horizontal=True)
+    with c6, st.container(border=True):
+        st.subheader("用户角色分布")
+        roles = [u["role"] for u in users_all]
+        if not roles:
+            st.info("暂无用户数据", icon=":material/bar_chart:")
+        else:
+            role_df = pd.Series(roles).value_counts().reset_index()
+            role_df.columns = ["角色", "用户数"]
+            role_chart = (
+                alt.Chart(role_df)
+                .mark_arc(innerRadius=45)
+                .encode(theta="用户数:Q", color=alt.Color("角色:N"))
+            )
+            st.altair_chart(role_chart)
 # endregion
 
 # region 用户管理
@@ -470,9 +478,7 @@ with st.expander("举报管理", expanded=True):
                 st.caption(f"理由：{r['reason']} · {r['created_at']}")
                 if r["status"] == "pending":
                     col_a, col_b, col_c = st.columns(3)
-                    if col_a.button(
-                        "标记已处理", key=f"rep_ok_{r['id']}", type="primary"
-                    ):
+                    if col_a.button("标记已处理", key=f"rep_ok_{r['id']}", type="primary"):
                         Report.handle(r["id"], state["userid"], "handled")
                         st.toast("已标记为处理")
                         _refresh()
@@ -483,19 +489,16 @@ with st.expander("举报管理", expanded=True):
                     if is_post:
                         if col_c.button("删除文章", key=f"rep_delpost_{r['id']}"):
                             Post.delete(r["postid"])  # NOQA
-                            Report.handle(
-                                r["id"], state["userid"], "handled", "已删除文章"
-                            )
+                            Report.handle(r["id"], state["userid"], "handled", "已删除文章")
                             st.toast("已删除文章并标记处理")
                             _refresh()
-                    elif r.get("commentid"):
-                        if col_c.button("删除评论", key=f"rep_delcomment_{r['id']}"):
-                            delete_comment_by_id(r["commentid"])
-                            Report.handle(
-                                r["id"], state["userid"], "handled", "已删除评论"
-                            )
-                            st.toast("已删除评论并标记处理")
-                            _refresh()
+                    elif r.get("commentid") and col_c.button(
+                        "删除评论", key=f"rep_delcomment_{r['id']}"
+                    ):
+                        delete_comment_by_id(r["commentid"])
+                        Report.handle(r["id"], state["userid"], "handled", "已删除评论")
+                        st.toast("已删除评论并标记处理")
+                        _refresh()
                 else:
                     st.caption(
                         f"处理结果：{status_map[r['status']]} · "

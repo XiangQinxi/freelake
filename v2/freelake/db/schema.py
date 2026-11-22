@@ -10,10 +10,13 @@
 """
 
 import datetime
+import logging
 import os
 
 from .connection import db
 from .models import ALL_MODELS, now_str
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 4
 
@@ -32,9 +35,7 @@ def current_schema_version() -> int:
 
 
 def _has_any_table() -> bool:
-    return any(db.table_exists(name) for name in _LEGACY_TABLES) or db.table_exists(
-        "posts"
-    )
+    return any(db.table_exists(name) for name in _LEGACY_TABLES) or db.table_exists("posts")
 
 
 def archive_legacy_db() -> str:
@@ -46,7 +47,7 @@ def archive_legacy_db() -> str:
     if os.path.exists(path):
         os.replace(path, backup)
     db.connect(reuse_if_open=True)
-    print(
+    logger.warning(
         "[freelake.db] 检测到旧版数据库结构：本版本不做数据迁移，"
         f"旧库已备份为 {os.path.basename(backup)}，正在重建空库。"
     )

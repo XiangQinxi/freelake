@@ -15,22 +15,47 @@ FreeLake 数据层门面（api.py）
 这样以后调整服务层内部分包时页面不用改。
 """
 
-from const import admin, announcement_tags, user  # NOQA: F401  （历史用法：页面会 from api import admin? 保留）
+from const import (  # NOQA: F401  （历史用法：页面会 from api import admin? 保留）
+    admin,
+    announcement_tags,
+    user,
+)
 from freelake.config import (  # NOQA: F401
     ANNOUNCEMENT_POST_TITLE,
     ATTACHMENTS_DIR,
-    ATTACHMENT_EXT_RE as _ATTACHMENT_EXT_RE,
-    AVATARS_DIR,
     AVATAR_QUALITY,
+    AVATARS_DIR,
     DIR,
     MAX_ATTACHMENT_BYTES,
     MAX_AVATAR_DIM,
     PBKDF2_ITERATIONS,
-    PASSWORD_OK_TTL as _PASSWORD_OK_TTL,
     SECRET_KEY_TTL_DAYS,
-    SENSITIVE_COLUMNS as _SENSITIVE_COLUMNS,
-    VALID_USERID_RE as _VALID_USERID_RE,
     salt,
+)
+from freelake.config import (
+    ATTACHMENT_EXT_RE as _ATTACHMENT_EXT_RE,
+)
+from freelake.config import (
+    PASSWORD_OK_TTL as _PASSWORD_OK_TTL,
+)
+from freelake.config import (
+    SENSITIVE_COLUMNS as _SENSITIVE_COLUMNS,
+)
+from freelake.config import (
+    VALID_USERID_RE as _VALID_USERID_RE,
+)
+from freelake.db.adapters import (  # NOQA: F401
+    _attachment_dict,
+    _attachment_map,
+    _comment_dict,
+    _comments_map,
+    _draft_dict,
+    _draft_tag_map,
+    _last_comment_map,
+    _post_dicts,
+    _report_dict,
+    _tag_map,
+    _user_dict,
 )
 from freelake.db.connection import UNIQUE_VIOLATION, db  # NOQA: F401
 from freelake.db.models import (  # NOQA: F401
@@ -40,20 +65,46 @@ from freelake.db.models import (  # NOQA: F401
     TARGET_POST,
     USER_ACTIVE,
     USER_DISABLED,
-    AttachmentModel as _Attachment,
-    BookmarkModel as _Bookmark,
-    CommentModel as _Comment,
-    DraftModel as _Draft,
-    DraftTagModel as _DraftTag,
-    LikeModel as _Like,
-    PostModel as _Post,
-    PostTagModel as _PostTag,
-    ReportModel as _Report,
-    SchemaMetaModel as _SchemaMeta,
-    SessionModel as _Session,
-    TagModel as _Tag,
-    UserModel as _User,
     now_str,
+)
+from freelake.db.models import (
+    AttachmentModel as _Attachment,
+)
+from freelake.db.models import (
+    BookmarkModel as _Bookmark,
+)
+from freelake.db.models import (
+    CommentModel as _Comment,
+)
+from freelake.db.models import (
+    DraftModel as _Draft,
+)
+from freelake.db.models import (
+    DraftTagModel as _DraftTag,
+)
+from freelake.db.models import (
+    LikeModel as _Like,
+)
+from freelake.db.models import (
+    PostModel as _Post,
+)
+from freelake.db.models import (
+    PostTagModel as _PostTag,
+)
+from freelake.db.models import (
+    ReportModel as _Report,
+)
+from freelake.db.models import (
+    SchemaMetaModel as _SchemaMeta,
+)
+from freelake.db.models import (
+    SessionModel as _Session,
+)
+from freelake.db.models import (
+    TagModel as _Tag,
+)
+from freelake.db.models import (
+    UserModel as _User,
 )
 from freelake.db.query import (  # NOQA: F401
     _readonly_authorizer,
@@ -67,7 +118,6 @@ from freelake.db.schema import (  # NOQA: F401
     current_schema_version,
     init_database,
 )
-from freelake.settings import Config, admin_credentials  # NOQA: F401
 from freelake.services.admin import (  # NOQA: F401
     delete_comment_by_id,
     delete_orphaned_attachments,
@@ -94,16 +144,6 @@ from freelake.services.content import (  # NOQA: F401
     build_attachments_zip,
 )
 from freelake.services.interactions import Bookmark, Like, Report  # NOQA: F401
-from freelake.services.sessions import (  # NOQA: F401
-    SESSION_TTL_DAYS,
-    TOKEN_PREFIX,
-    count_sessions,
-    create_session,
-    purge_sessions,
-    resolve_session,
-    revoke_session,
-    revoke_user_sessions,
-)
 from freelake.services.posts import (  # NOQA: F401
     Post,
     _comment_id_at,
@@ -124,20 +164,18 @@ from freelake.services.security import (  # NOQA: F401
     sha256,
     verify_password,
 )
-from freelake.services.users import User  # NOQA: F401
-from freelake.db.adapters import (  # NOQA: F401
-    _attachment_dict,
-    _attachment_map,
-    _comment_dict,
-    _comments_map,
-    _draft_dict,
-    _draft_tag_map,
-    _last_comment_map,
-    _post_dicts,
-    _report_dict,
-    _tag_map,
-    _user_dict,
+from freelake.services.sessions import (  # NOQA: F401
+    SESSION_TTL_DAYS,
+    TOKEN_PREFIX,
+    count_sessions,
+    create_session,
+    purge_sessions,
+    resolve_session,
+    revoke_session,
+    revoke_user_sessions,
 )
+from freelake.services.users import User  # NOQA: F401
+from freelake.settings import Config, admin_credentials  # NOQA: F401
 
 
 # region 启动装配：导入即建库（页面依赖这个副作用）
@@ -158,16 +196,19 @@ init_database()
 
 # 启动引导：创建管理员账号（凭据来自 secrets / 环境变量 / config.toml）
 _admin = admin_credentials()
-if _admin.get("userid") and _admin.get("password"):
-    if _User.get_or_none(_User.userid == _admin["userid"]) is None:
-        _User.create(
-            userid=_admin["userid"],
-            username=_admin.get("username") or _admin["userid"],
-            password_hash=hash_password(_admin["password"]),
-            role=admin,
-            created_at=now_str(),
-            updated_at=now_str(),
-        )
+if (
+    _admin.get("userid")
+    and _admin.get("password")
+    and _User.get_or_none(_User.userid == _admin["userid"]) is None
+):
+    _User.create(
+        userid=_admin["userid"],
+        username=_admin.get("username") or _admin["userid"],
+        password_hash=hash_password(_admin["password"]),
+        role=admin,
+        created_at=now_str(),
+        updated_at=now_str(),
+    )
 
 bootstrap_announcements()
 # endregion

@@ -13,11 +13,20 @@ from peewee import fn
 
 from freelake.db.models import (
     USER_ACTIVE,
+)
+from freelake.db.models import (
     AttachmentModel as _Attachment,
+)
+from freelake.db.models import (
     CommentModel as _Comment,
+)
+from freelake.db.models import (
     DraftTagModel as _DraftTag,
-    PostModel as _Post,
+)
+from freelake.db.models import (
     PostTagModel as _PostTag,
+)
+from freelake.db.models import (
     TagModel as _Tag,
 )
 

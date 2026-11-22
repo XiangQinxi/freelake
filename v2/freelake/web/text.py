@@ -26,4 +26,3 @@ def highlight_mentions(text: str) -> str:
         r":blue-badge[@\1]",
         text,
     )
-

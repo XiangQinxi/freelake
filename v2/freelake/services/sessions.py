@@ -12,15 +12,17 @@ token 形如 ``sess_<24 字节 urlsafe>``，有效期 ``SESSION_TTL_DAYS`` 天�
 """
 
 import datetime
-import typing
 
-from freelake.db.connection import db
 from freelake.db.models import (
     NOW_FORMAT,
     USER_ACTIVE,
-    SessionModel as _Session,
-    UserModel as _User,
     now_str,
+)
+from freelake.db.models import (
+    SessionModel as _Session,
+)
+from freelake.db.models import (
+    UserModel as _User,
 )
 from freelake.services.security import generate_sk_key, sha256
 

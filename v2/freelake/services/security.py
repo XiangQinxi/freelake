@@ -9,7 +9,6 @@
 带「库里存的哈希」，改密后旧缓存自然失效。
 """
 
-import datetime
 import hashlib
 import hmac
 import io
@@ -29,31 +28,24 @@ from freelake.config import (
     MAX_AVATAR_DIM,
     PASSWORD_OK_TTL,
     PBKDF2_ITERATIONS,
-    SECRET_KEY_TTL_DAYS,
     salt,
 )
-from freelake.db.models import NOW_FORMAT, UserModel as _User, now_str
+
 
 def sha256(value):
     """获取哈希加密加盐后的文本（旧版用户密码与附件密码使用）"""
     return hashlib.sha256((value + salt).encode()).hexdigest()
 
 
-PBKDF2_ITERATIONS = 200_000
-
-# 管理员会话密钥（secret_key）有效期：过期后需重新登录换取
-SECRET_KEY_TTL_DAYS = 30
-
-
 # 用户 ID：3–20 位字母/数字/下划线/连字符（全站用它拼 URL 与 Cookie）
+
 
 def is_valid_password(password: str | None) -> bool:
     """密码规则：至少 8 位且同时包含字母与数字（与注册页提示语一致）。"""
     if not password or len(password) < 8 or len(password) > 128:
         return False
-    return any(ch.isalpha() for ch in password) and any(
-        ch.isdigit() for ch in password
-    )
+    return any(ch.isalpha() for ch in password) and any(ch.isdigit() for ch in password)
+
 
 def hash_password(password: str) -> str:
     """使用 PBKDF2-SHA256 加盐哈希用户密码，返回自包含的存储字符串。"""
@@ -64,9 +56,9 @@ def hash_password(password: str) -> str:
     return f"pbkdf2${PBKDF2_ITERATIONS}${pw_salt}${digest}"
 
 
-
 def _password_cache_key(password: str, stored: str) -> str:
     return sha256(f"{password}\x00{stored}")
+
 
 def _password_cached(password: str, stored: str) -> bool:
     """查会话内缓存：命中且未过期返回 True，否则 False（只缓存成功）。
@@ -84,6 +76,7 @@ def _password_cached(password: str, stored: str) -> bool:
     expires_at = cache.get(_password_cache_key(password, stored))
     return bool(expires_at) and expires_at >= time.time()
 
+
 def _password_remember(password: str, stored: str) -> None:
     try:
         cache = st.session_state.get("_pw_ok")
@@ -93,6 +86,7 @@ def _password_remember(password: str, stored: str) -> None:
         cache[_password_cache_key(password, stored)] = time.time() + PASSWORD_OK_TTL
     except Exception:
         pass
+
 
 def verify_password(password: str, stored: str) -> bool:
     """校验密码；兼容旧的 `sha256(明文+salt)` 存储格式。
@@ -105,6 +99,7 @@ def verify_password(password: str, stored: str) -> bool:
     if ok:
         _password_remember(password, stored)
     return ok
+
 
 def _verify_password_uncached(password: str, stored: str) -> bool:
     """真正的哈希比对（不含缓存）。"""
@@ -119,6 +114,7 @@ def _verify_password_uncached(password: str, stored: str) -> bool:
         return hmac.compare_digest(calc, digest)
     return hmac.compare_digest(sha256(password), stored)
 
+
 def generate_sk_key(byte_length=40):
     """
     生成以 'sk' 开头的安全随机密钥。
@@ -131,6 +127,7 @@ def generate_sk_key(byte_length=40):
 
 
 # 模型定义已迁移到 ``freelake.db.models``（v4）；上方按旧名别名导入。
+
 
 def save_avatar(uploaded_file) -> dict:
     """
@@ -192,6 +189,7 @@ def save_avatar(uploaded_file) -> dict:
 
 _AVATAR_FILE_RE = re.compile(r"^[0-9a-f]{32}\.jpg$")
 
+
 def is_valid_avatar_name(avatar_name: str | None) -> bool:
     """头像字段只允许「默认头像」或 avatars/ 下真实存在的 <uuid>.jpg。
 
@@ -204,6 +202,7 @@ def is_valid_avatar_name(avatar_name: str | None) -> bool:
     if not _AVATAR_FILE_RE.fullmatch(name):
         return False
     return os.path.isfile(os.path.join(AVATARS_DIR, name))
+
 
 def get_avatar_bytes(avatar_name: str) -> bytes:
     """按文件名读取头像二进制（只接受文件名，不再兼容绝对路径）。"""

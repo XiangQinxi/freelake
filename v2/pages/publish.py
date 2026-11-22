@@ -50,9 +50,7 @@ if check_by_state():
                     st.rerun()
 
 with st.container(border=True):
-    tab_edit, tab_preview = st.tabs(
-        [":material/edit: 编辑", ":material/visibility: 预览"]
-    )
+    tab_edit, tab_preview = st.tabs([":material/edit: 编辑", ":material/visibility: 预览"])
 
     with tab_edit:
         new_title = st.text_input(

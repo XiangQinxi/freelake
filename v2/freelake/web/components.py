@@ -14,20 +14,16 @@ from api import (
     Attachment,
     Bookmark,
     Like,
-    Post,
     User,
-    format_size,
     get_avatar_bytes,
 )
 from api2 import check_by_state
 from const import admin
-
 from freelake.web.dialogs import (
     confirm_delete_post,
     edit_post,
     report_post_dialog,
 )
-from freelake.web.text import highlight_keyword, highlight_mentions
 
 state = st.session_state
 user = User()
@@ -45,9 +41,7 @@ def avatar_link(container, avatar_name, userid, width):
     ``st.image(link=...)`` 在不同环境下可能新开标签页；这里改用不带 ``target``
     的 ``<a>`` 包裹 ``img``，确保同标签跳转。
     """
-    b64 = base64.b64encode(
-        get_avatar_bytes(avatar_name or "default_avatar.jpeg")
-    ).decode()
+    b64 = base64.b64encode(get_avatar_bytes(avatar_name or "default_avatar.jpeg")).decode()
     container.html(
         f'<a href="?user_id={userid}" title="查看个人主页" '
         f'style="display:inline-block;line-height:0;">'
@@ -59,7 +53,6 @@ def avatar_link(container, avatar_name, userid, width):
 
 
 state = st.session_state
-
 
 
 def basic_information(post, _config=None, compact=False):
@@ -93,14 +86,10 @@ def basic_information(post, _config=None, compact=False):
         liked = Like.is_liked(post["id"], state["userid"])
         bookmarked = Bookmark.is_bookmarked(post["id"], state["userid"])
         menu_options.append(
-            ":material/favorite: 取消点赞"
-            if liked
-            else ":material/favorite_border: 点赞"
+            ":material/favorite: 取消点赞" if liked else ":material/favorite_border: 点赞"
         )
         menu_options.append(
-            ":material/bookmark: 取消收藏"
-            if bookmarked
-            else ":material/bookmark_border: 收藏"
+            ":material/bookmark: 取消收藏" if bookmarked else ":material/bookmark_border: 收藏"
         )
         action = col_3.menu_button(
             "",
@@ -147,8 +136,7 @@ def basic_information(post, _config=None, compact=False):
         )
 
 
-
-def preview(att, container, saved_name, attpassword="", auto_preview=True):
+def preview(att, container, saved_name, attpassword="", auto_preview=True, post=None):
     """在指定容器中渲染附件的缩略图/类型图标。
 
     - 图片：可访问时生成缩略图，否则显示图片占位图标
@@ -160,7 +148,7 @@ def preview(att, container, saved_name, attpassword="", auto_preview=True):
             not attpassword
             or not auto_preview
             or state["attpassword"] == attpassword
-            or state["userid"] == post.get("authorid")
+            or state["userid"] == (post or {}).get("authorid")
             or _current_userconfig().get("role") == admin
         ):
             b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)  # NOQA
@@ -180,13 +168,10 @@ def preview(att, container, saved_name, attpassword="", auto_preview=True):
         container.markdown(":material/insert_drive_file:")
 
 
-
 def like_and_bookmarked(post):
     """详情页点赞与收藏按钮组（未激活 secondary，已激活 primary 更醒目）。"""
     with st.container(horizontal=True):
-        liked = (
-            Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
-        )
+        liked = Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
         if st.button(
             f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
             key=f"detail_like_{post['id']}",
@@ -198,9 +183,7 @@ def like_and_bookmarked(post):
             else:
                 st.warning("请先登录")
         bookmarked = (
-            Bookmark.is_bookmarked(post["id"], state["userid"])
-            if state.get("userid")
-            else False
+            Bookmark.is_bookmarked(post["id"], state["userid"]) if state.get("userid") else False
         )
         if st.button(
             f"{':material/bookmark:' if bookmarked else ':material/bookmark_border:'} {Bookmark.count(post['id'])}",
@@ -215,4 +198,3 @@ def like_and_bookmarked(post):
 
 
 # endregion
-

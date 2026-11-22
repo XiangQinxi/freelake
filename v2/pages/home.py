@@ -15,18 +15,25 @@ FreeLake 首页（pages/home.py）
 
 import base64
 import datetime
-import io
 import json
-import re
 from pathlib import Path
 
 import streamlit as st
 from streamlit_video_background import render_video_background
 
-from api import (Attachment, Bookmark, Like, Post, Report, User,
-                 build_attachments_zip, format_size,
-                 get_avatar_bytes, revoke_user_sessions, save_avatar, sha256)
+from api import (
+    Attachment,
+    Post,
+    User,
+    build_attachments_zip,
+    format_size,
+    get_avatar_bytes,
+    revoke_user_sessions,
+    save_avatar,
+    sha256,
+)
 from api2 import check_by_state
+from const import admin, tags
 from freelake.web.components import (
     avatar_link,
     basic_information,
@@ -34,14 +41,10 @@ from freelake.web.components import (
     preview,
 )
 from freelake.web.dialogs import (
-    confirm_delete_post,
     edit_comment_dialog,
-    edit_post,
     report_comment_dialog,
-    report_post_dialog,
 )
 from freelake.web.text import highlight_keyword, highlight_mentions
-from const import admin, tags
 
 # 主页排序选项（menu_button 展开项）与对应的查询排序键
 SORT_OPTIONS = ("按日期排序", "按点赞量排序", "按浏览量排序", "按收藏量排序")
@@ -56,7 +59,6 @@ DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
 
 # 主页动态视频背景由 `streamlit_video_background` 扩展包提供（在下方主页视图处调用）。
 # 通过 `pip install -e streamlit-video-background` 已安装，可独立分发。
-
 
 
 user = User()
@@ -93,9 +95,7 @@ if user_id:
         with col_i:
             st.markdown(f"### {userconfig.get('username')}")
             role_name = "管理员" if userconfig.get("role") == admin else "普通用户"
-            st.caption(
-                f":material/badge: {role_name} · 注册于 {userconfig.get('created_at')}"
-            )
+            st.caption(f":material/badge: {role_name} · 注册于 {userconfig.get('created_at')}")
             st.markdown(userconfig.get("description") or "这个用户很懒，什么也没留下~")
         st.divider()
 
@@ -158,9 +158,7 @@ if user_id:
                             st.error("修改失败：请检查密码或登录状态已过期")
                 # —— 修改密码 / 退出登录 ——
                 col_pass, col_log = st.columns(2)
-                with col_pass.popover(
-                    ":material/password: 修改密码", type="secondary"
-                ):
+                with col_pass.popover(":material/password: 修改密码", type="secondary"):
                     original_password = st.text_input(
                         "原密码", placeholder="请输入原密码", type="password"
                     )
@@ -187,9 +185,7 @@ if user_id:
                                 st.rerun()
                             else:
                                 st.error("原密码错误，修改失败！")
-                if col_log.button(
-                    ":material/logout: 退出登录", type="primary", width="stretch"
-                ):
+                if col_log.button(":material/logout: 退出登录", type="primary", width="stretch"):
                     st.switch_page("pages/logout.py")
             st.divider()
 
@@ -278,9 +274,7 @@ else:
                     for att in attachments:
                         saved_name = att.get("saved_name", "")
                         if saved_name in missing:
-                            st.warning(
-                                f"附件 {att.get('original_name', '未命名')} 文件已丢失"
-                            )
+                            st.warning(f"附件 {att.get('original_name', '未命名')} 文件已丢失")
                         elif saved_name and att.get("type", "").startswith("image/"):
                             b64 = base64.b64encode(files[saved_name]).decode()
                             st.image(f"data:{att['type']};base64,{b64}")  # NOQA
@@ -293,8 +287,7 @@ else:
                             att.get("original_name", "download"),
                         )
                         for att in attachments
-                        if att.get("saved_name")
-                        and att.get("saved_name") not in missing
+                        if att.get("saved_name") and att.get("saved_name") not in missing
                     )
                     if missing:
                         st.warning(f"有 {len(missing)} 个附件文件已丢失，无法打包")
@@ -328,17 +321,11 @@ else:
                                 ):  # NOQA
                                     b64 = base64.b64encode(file_bytes).decode()
                                     if att.get("type", "").startswith("image/"):
-                                        st.image(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.image(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("video/"):
-                                        st.video(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.video(f"data:{att['type']};base64,{b64}")  # NOQA
                                     elif att.get("type", "").startswith("audio/"):
-                                        st.audio(
-                                            f"data:{att['type']};base64,{b64}"
-                                        )  # NOQA
+                                        st.audio(f"data:{att['type']};base64,{b64}")  # NOQA
 
                                 st.download_button(
                                     label=f"下载 “{att.get('original_name', '文件')}”",
@@ -374,13 +361,9 @@ else:
             # 评论展示
             if post.get("comments"):
                 comments = post["comments"]
-                with st.expander(
-                    f":material/comment: 评论 ({len(comments)})", expanded=True
-                ):
+                with st.expander(f":material/comment: 评论 ({len(comments)})", expanded=True):
                     # 批量查询评论作者配置，避免逐条 N+1
-                    comment_configs = User.get_configs(
-                        json.loads(c)["userid"] for c in comments
-                    )
+                    comment_configs = User.get_configs(json.loads(c)["userid"] for c in comments)
                     for index, comment in enumerate(comments):
                         comment = json.loads(comment)
                         cfg = comment_configs.get(comment["userid"])
@@ -389,9 +372,7 @@ else:
                                 [0.08, 0.82, 0.1], vertical_alignment="top"
                             )
                             avatar_link(col_a, cfg["avatar"], comment["userid"], 40)
-                            col_b.markdown(
-                                f":blue-badge[{index + 1}楼] **{cfg['username']}**"
-                            )
+                            col_b.markdown(f":blue-badge[{index + 1}楼] **{cfg['username']}**")
                             col_b.caption(comment.get("created_at", ""))
                             col_b.markdown(highlight_mentions(comment["content"]))
                             if check_by_state():
@@ -580,16 +561,12 @@ else:
 
                 for post in posts:
                     with st.container(border=True):
-                        basic_information(
-                            post, author_configs.get(post["authorid"]), compact=True
-                        )
+                        basic_information(post, author_configs.get(post["authorid"]), compact=True)
                         snippet = (post["content"] or "").strip()
                         if len(snippet) > 150:
                             snippet = snippet[:150] + "…"
                         if snippet:
-                            st.markdown(
-                                highlight_keyword(snippet, search_keyword or "")
-                            )
+                            st.markdown(highlight_keyword(snippet, search_keyword or ""))
 
                         with st.container(horizontal_alignment="right"):
                             if st.button(
@@ -602,13 +579,9 @@ else:
 
                         last = last_comments.get(post["id"])
                         if last:
-                            with st.expander(
-                                ":material/chat: 最新一条评论", expanded=True
-                            ):
+                            with st.expander(":material/chat: 最新一条评论", expanded=True):
                                 last_user = author_configs.get(last["userid"])
-                                name = (
-                                    last_user["username"] if last_user else "用户已注销"
-                                )
+                                name = last_user["username"] if last_user else "用户已注销"
                                 st.markdown(
                                     f"**{name}**：{highlight_mentions(last['content'])} （{last['created_at']}）"
                                 )

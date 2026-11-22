@@ -6,6 +6,7 @@
 以及草稿（含草稿标签）的保存与读取。
 """
 
+import base64
 import hashlib
 import io
 import os
@@ -16,17 +17,23 @@ import zipfile
 import streamlit as st
 from PIL import Image
 
-from freelake.config import ATTACHMENTS_DIR, ATTACHMENT_EXT_RE, MAX_ATTACHMENT_BYTES
-from freelake.db.adapters import _attachment_dict, _draft_dict, _draft_tag_map
+from freelake.config import ATTACHMENT_EXT_RE, ATTACHMENTS_DIR, MAX_ATTACHMENT_BYTES
+from freelake.db.adapters import _draft_dict, _draft_tag_map
 from freelake.db.connection import db
-from freelake.db.query import format_size
 from freelake.db.models import (
-    AttachmentModel as _Attachment,
     DraftModel as _Draft,
+)
+from freelake.db.models import (
     DraftTagModel as _DraftTag,
+)
+from freelake.db.models import (
     TagModel as _Tag,
+)
+from freelake.db.models import (
     now_str,
 )
+from freelake.db.query import format_size
+
 
 def _read_attachment_file(saved_name: str) -> bytes:
     """读附件字节并按文件名缓存（附件名是 uuid、内容不可变，缓存永远安全）。
@@ -41,9 +48,8 @@ def _read_attachment_file(saved_name: str) -> bytes:
     except OSError:
         return b""
 
-def build_attachments_zip(
-    post_id: int, entries: tuple[tuple[str, str], ...]
-) -> bytes:
+
+def build_attachments_zip(post_id: int, entries: tuple[tuple[str, str], ...]) -> bytes:
     """把一篇帖子的附件打包成 ZIP 字节流（按帖子 + 附件名缓存）。
 
     entries 是 ((saved_name, original_name), ...) 的元组——用元组而不是
@@ -57,6 +63,7 @@ def build_attachments_zip(
             if data:
                 zf.writestr(original_name or saved_name, data)
     return buffer.getvalue()
+
 
 class Attachment:
     @staticmethod
@@ -80,14 +87,12 @@ class Attachment:
         if size == 0:
             raise ValueError("文件为空")
         if size > MAX_ATTACHMENT_BYTES:
-            raise ValueError(
-                f"文件超过上限 {format_size(MAX_ATTACHMENT_BYTES)}"
-            )
+            raise ValueError(f"文件超过上限 {format_size(MAX_ATTACHMENT_BYTES)}")
 
         # 生成唯一文件名（保留原始扩展名，但只接受字母数字扩展名）
-        ext = os.path.splitext(os.path.basename(uploaded_file.name or ''))[1].lower()
+        ext = os.path.splitext(os.path.basename(uploaded_file.name or ""))[1].lower()
         if not ATTACHMENT_EXT_RE.fullmatch(ext):
-            ext = ''
+            ext = ""
         unique_name = f"{uuid.uuid4().hex}{ext}"
 
         # 保存文件到 attachments 目录
@@ -134,9 +139,7 @@ class Attachment:
 
     @staticmethod
     def get_thumbnail_base64(saved_name: str, max_width: int = 300) -> str:
-        return base64.b64encode(
-            Attachment.get_thumbnail_bytes(saved_name, max_width)
-        ).decode()
+        return base64.b64encode(Attachment.get_thumbnail_bytes(saved_name, max_width)).decode()
 
     @staticmethod
     def get_file(saved_name: str) -> bytes:
@@ -152,6 +155,7 @@ class Attachment:
         # 防目录穿越：与头像读取一致，只取文件名部分
         return _read_attachment_file(os.path.basename(saved_name or ""))
 
+
 class Draft:
     """草稿：用户可保存未完成的文章，稍后在发布页继续编辑。"""
 
@@ -160,7 +164,7 @@ class Draft:
         userid: str,
         title: str = "",
         content: str = "",
-        tags: typing.List[str] = None,
+        tags: list[str] = None,
         attpassword: str = "",
         draft_id: int | None = None,
     ) -> int | None:
@@ -169,9 +173,7 @@ class Draft:
             return None
         now = now_str()
         if draft_id:
-            d = _Draft.get_or_none(
-                (_Draft.id == draft_id) & (_Draft.user_id == userid)
-            )
+            d = _Draft.get_or_none((_Draft.id == draft_id) & (_Draft.user_id == userid))
             if d is None:
                 # 草稿不存在或不属于该用户：返回 None 让调用方报错，
                 # 不要静默新建（否则一次越权 ID 就变成一份新草稿）。
@@ -201,12 +203,7 @@ class Draft:
     @staticmethod
     def get_drafts(userid: str) -> list[dict]:
         """获取某用户的全部草稿（按草稿 ID 倒序）。"""
-        rows = (
-            _Draft.select()
-            .where(_Draft.user_id == userid)
-            .order_by(_Draft.id.desc())
-            .dicts()
-        )
+        rows = _Draft.select().where(_Draft.user_id == userid).order_by(_Draft.id.desc()).dicts()
         tag_map = _draft_tag_map(row["id"] for row in rows)
         return [_draft_dict(row, tag_map.get(row["id"])) for row in rows]
 
@@ -227,9 +224,7 @@ class Draft:
     def delete(userid: str, draft_id: int) -> bool:
         """删除草稿（仅限本人）。"""
         return (
-            _Draft.delete()
-            .where((_Draft.id == draft_id) & (_Draft.user_id == userid))
-            .execute()
+            _Draft.delete().where((_Draft.id == draft_id) & (_Draft.user_id == userid)).execute()
             > 0
         )
 
@@ -237,6 +232,7 @@ class Draft:
     def count(userid: str) -> int:
         """某用户的草稿数。"""
         return _Draft.select().where(_Draft.user_id == userid).count()
+
 
 def _sync_draft_tags(draft_id: int, tags: typing.Iterable[str] | None) -> None:
     """整体替换草稿标签（与文章标签同构，但不维护 usage_count：草稿不算正式发布）。"""

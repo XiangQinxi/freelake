@@ -7,6 +7,7 @@
 """
 
 import datetime
+import logging
 import typing
 
 from peewee import fn
@@ -15,14 +16,35 @@ from freelake.db.adapters import _last_comment_map, _post_dicts
 from freelake.db.connection import db
 from freelake.db.models import (
     AttachmentModel as _Attachment,
+)
+from freelake.db.models import (
+    BookmarkModel as _Bookmark,
+)
+from freelake.db.models import (
     CommentModel as _Comment,
+)
+from freelake.db.models import (
+    LikeModel as _Like,
+)
+from freelake.db.models import (
     PostModel as _Post,
+)
+from freelake.db.models import (
     PostTagModel as _PostTag,
+)
+from freelake.db.models import (
     TagModel as _Tag,
+)
+from freelake.db.models import (
     UserModel as _User,
+)
+from freelake.db.models import (
     now_str,
 )
 from freelake.services.security import sha256
+
+logger = logging.getLogger(__name__)
+
 
 def _sync_tags(post_id: int, tags: typing.Iterable[str] | None) -> None:
     """用给定标签集合整体替换文章标签（保持用户选择顺序，自动去重）。"""
@@ -34,22 +56,17 @@ def _sync_tags(post_id: int, tags: typing.Iterable[str] | None) -> None:
     with db.atomic():
         old_ids = [
             row["tag"]
-            for row in _PostTag.select(_PostTag.tag)
-            .where(_PostTag.post == post_id)
-            .dicts()
+            for row in _PostTag.select(_PostTag.tag).where(_PostTag.post == post_id).dicts()
         ]
         _PostTag.delete().where(_PostTag.post == post_id).execute()
         # 标签计数：旧集合 -1，新集合 +1（同一事务内完成）
         for tag_id in old_ids:
-            _Tag.update(usage_count=_Tag.usage_count - 1).where(
-                _Tag.id == tag_id
-            ).execute()
+            _Tag.update(usage_count=_Tag.usage_count - 1).where(_Tag.id == tag_id).execute()
         for position, name in enumerate(names):
             tag, _created = _Tag.get_or_create(name=name)
-            _Tag.update(usage_count=_Tag.usage_count + 1).where(
-                _Tag.id == tag.id
-            ).execute()
+            _Tag.update(usage_count=_Tag.usage_count + 1).where(_Tag.id == tag.id).execute()
             _PostTag.create(post=post_id, tag=tag, position=position)
+
 
 def _sync_attachments(post_id: int, attachments: typing.Iterable[dict]) -> None:
     """把发布时上传的附件元数据写入 _attachment（文件本体已由 Attachment.save 落盘）。"""
@@ -68,6 +85,7 @@ def _sync_attachments(post_id: int, attachments: typing.Iterable[dict]) -> None:
             created_at=now_str(),
         )
 
+
 def _comment_id_at(postid: int, comment_index: int) -> int | None:
     """按「文章内楼层次序」取评论 ID（与 _comments_map 的排序一致）。"""
     if comment_index < 0:
@@ -81,6 +99,7 @@ def _comment_id_at(postid: int, comment_index: int) -> int | None:
         .scalar()
     )
 
+
 class Post:
     """文章接口。所有返回值保持 v1 键名（authorid / tags / attachments / comments）。"""
 
@@ -90,12 +109,11 @@ class Post:
         authorid: str,
         title: str,
         content: str,
-        attachments: typing.List[dict[str, str]],
+        attachments: list[dict[str, str]],
         attpassword: str | None = None,
-        tags: typing.List[str] = None,
+        tags: list[str] = None,
     ) -> int:
         """发布文章，返回新文章 ID（附件与标签在同一事务内写入）。"""
-        print(f"{authorid}发布了新文章：{title}")
         author = _User.get_or_none(_User.userid == authorid)
         with db.atomic():
             post = _Post.create(
@@ -110,6 +128,7 @@ class Post:
             )
             _sync_attachments(post.id, attachments)
             _sync_tags(post.id, tags)
+        logger.info("%s 发布了新文章《%s》（post_id=%s）", authorid, title, post.id)
         return post.id
 
     @staticmethod
@@ -122,18 +141,14 @@ class Post:
         with db.atomic():
             tag_ids = [
                 row["tag"]
-                for row in _PostTag.select(_PostTag.tag)
-                .where(_PostTag.post == postid)
-                .dicts()
+                for row in _PostTag.select(_PostTag.tag).where(_PostTag.post == postid).dicts()
             ]
             for tag_id in tag_ids:
-                _Tag.update(usage_count=_Tag.usage_count - 1).where(
-                    _Tag.id == tag_id
-                ).execute()
+                _Tag.update(usage_count=_Tag.usage_count - 1).where(_Tag.id == tag_id).execute()
             return _Post.delete().where(_Post.id == postid).execute() > 0
 
     @staticmethod
-    def edit(postid: int, title: str, content: str, tags: typing.List[str] = None) -> bool:
+    def edit(postid: int, title: str, content: str, tags: list[str] = None) -> bool:
         """编辑文章标题 / 正文 / 标签。"""
         with db.atomic():
             updated = (
@@ -178,9 +193,7 @@ class Post:
         - 发布时间：created_at 字符串区间（字典序即时间序），起止日期均包含
         """
         if keyword:
-            query = query.where(
-                (_Post.title.contains(keyword)) | (_Post.content.contains(keyword))
-            )
+            query = query.where((_Post.title.contains(keyword)) | (_Post.content.contains(keyword)))
         if tag:
             tagged = (
                 _PostTag.select(_PostTag.post)
@@ -203,13 +216,9 @@ class Post:
                 # 无匹配作者 → 查询恒为空
                 query = query.where(_Post.id == -1)
         if start_date is not None:
-            query = query.where(
-                _Post.created_at >= start_date.strftime("%Y-%m-%d") + " 00:00:00"
-            )
+            query = query.where(_Post.created_at >= start_date.strftime("%Y-%m-%d") + " 00:00:00")
         if end_date is not None:
-            query = query.where(
-                _Post.created_at <= end_date.strftime("%Y-%m-%d") + " 23:59:59"
-            )
+            query = query.where(_Post.created_at <= end_date.strftime("%Y-%m-%d") + " 23:59:59")
         return query
 
     @staticmethod
@@ -328,9 +337,7 @@ class Post:
                 created_at=now_str(),
                 updated_at=now_str(),
             )
-            _Post.update(comment_count=_Post.comment_count + 1).where(
-                _Post.id == postid
-            ).execute()
+            _Post.update(comment_count=_Post.comment_count + 1).where(_Post.id == postid).execute()
         return comment.id
 
     @staticmethod
@@ -371,7 +378,7 @@ class Post:
         likes = _Like.select().where(_Like.post == postid).count()
         bookmarks = _Bookmark.select().where(_Bookmark.post == postid).count()
         comments = _Comment.select().where(_Comment.post == postid).count()
-        _Post.update(
-            like_count=likes, bookmark_count=bookmarks, comment_count=comments
-        ).where(_Post.id == postid).execute()
+        _Post.update(like_count=likes, bookmark_count=bookmarks, comment_count=comments).where(
+            _Post.id == postid
+        ).execute()
         return {"likes": likes, "bookmarks": bookmarks, "comments": comments}

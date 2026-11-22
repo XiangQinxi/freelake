@@ -16,13 +16,25 @@ from freelake.db.connection import UNIQUE_VIOLATION, db
 from freelake.db.models import (
     NOW_FORMAT,
     USER_ACTIVE,
-    BookmarkModel as _Bookmark,
-    DraftModel as _Draft,
-    DraftTagModel as _DraftTag,
-    LikeModel as _Like,
-    SessionModel as _Session,
-    UserModel as _User,
     now_str,
+)
+from freelake.db.models import (
+    BookmarkModel as _Bookmark,
+)
+from freelake.db.models import (
+    DraftModel as _Draft,
+)
+from freelake.db.models import (
+    DraftTagModel as _DraftTag,
+)
+from freelake.db.models import (
+    LikeModel as _Like,
+)
+from freelake.db.models import (
+    SessionModel as _Session,
+)
+from freelake.db.models import (
+    UserModel as _User,
 )
 from freelake.services.security import (
     generate_sk_key,
@@ -32,6 +44,7 @@ from freelake.services.security import (
     sha256,
     verify_password,
 )
+
 
 class User:
     def register(
@@ -77,8 +90,10 @@ class User:
         """登录账号，如果用户名与其密码对应上则返回`True`"""
         if userid and password:
             user = _User.get_or_none(_User.userid == userid)
-            if user and user.status == USER_ACTIVE and verify_password(
-                password, user.password_hash
+            if (
+                user
+                and user.status == USER_ACTIVE
+                and verify_password(password, user.password_hash)
             ):
                 # 旧版 sha256 密码校验成功后自动升级为 PBKDF2
                 if not user.password_hash.startswith("pbkdf2$"):
@@ -98,18 +113,17 @@ class User:
         admin_password: str | None = None,
     ) -> bool | None:
         """检查是否为管理员"""
-        if self.check(admin_userid, admin_password):
-            if self.get_config(admin_userid)["role"] == admin:
-                return True
+        if self.check(admin_userid, admin_password) and (
+            self.get_config(admin_userid)["role"] == admin
+        ):
+            return True
         if not secret_key:
             return None
         user = _User.get_or_none(_User.secret_key_hash == sha256(secret_key))
         if user is None or user.role != admin:
             return False
         # 过期时间格式固定，字典序即时间序
-        return bool(user.secret_key_expires_at) and (
-            user.secret_key_expires_at >= now_str()
-        )
+        return bool(user.secret_key_expires_at) and (user.secret_key_expires_at >= now_str())
 
     @staticmethod
     def exists(userid: str) -> bool:
@@ -171,12 +185,12 @@ class User:
         ):
             return None
         key = generate_sk_key(16)
-        expires = (
-            datetime.datetime.now() + datetime.timedelta(days=SECRET_KEY_TTL_DAYS)
-        ).strftime(NOW_FORMAT)
-        _User.update(
-            secret_key_hash=sha256(key), secret_key_expires_at=expires
-        ).where(_User.userid == userid).execute()
+        expires = (datetime.datetime.now() + datetime.timedelta(days=SECRET_KEY_TTL_DAYS)).strftime(
+            NOW_FORMAT
+        )
+        _User.update(secret_key_hash=sha256(key), secret_key_expires_at=expires).where(
+            _User.userid == userid
+        ).execute()
         return key
 
     def modify(
@@ -244,14 +258,9 @@ class User:
         """
         if role not in (admin, user):
             return False
-        if not (
-            self.check_admin(admin_secret_key)
-            or self.is_admin(admin_userid, admin_password)
-        ):
+        if not (self.check_admin(admin_secret_key) or self.is_admin(admin_userid, admin_password)):
             return False
-        return (
-            _User.update(role=role).where(_User.userid == target_userid).execute() > 0
-        )
+        return _User.update(role=role).where(_User.userid == target_userid).execute() > 0
 
     @staticmethod
     def count() -> int:
@@ -286,14 +295,10 @@ class User:
                     _Bookmark.delete().where(_Bookmark.user_id == userid).execute()
                     draft_ids = [
                         row["id"]
-                        for row in _Draft.select(_Draft.id)
-                        .where(_Draft.user_id == userid)
-                        .dicts()
+                        for row in _Draft.select(_Draft.id).where(_Draft.user_id == userid).dicts()
                     ]
                     if draft_ids:
-                        _DraftTag.delete().where(
-                            _DraftTag.draft.in_(draft_ids)
-                        ).execute()
+                        _DraftTag.delete().where(_DraftTag.draft.in_(draft_ids)).execute()
                     _Draft.delete().where(_Draft.user_id == userid).execute()
                     user.delete_instance()
                 return True

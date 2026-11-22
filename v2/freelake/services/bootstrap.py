@@ -8,9 +8,11 @@
 
 from const import announcement_tags
 from freelake.config import ANNOUNCEMENT_POST_TITLE
-from freelake.db.models import PostModel as _Post, UserModel as _User
+from freelake.db.models import PostModel as _Post
+from freelake.db.models import UserModel as _User
 from freelake.services.posts import Post
 from freelake.settings import admin_credentials
+
 
 def bootstrap_announcements() -> None:
     """自动发布「迎新 + 社区规范」合订公告（幂等）。
@@ -24,9 +26,7 @@ def bootstrap_announcements() -> None:
     # 不会真正创建账号，避免导入测试库时误写入公告文章）。
     if not admin_id or _User.get_or_none(_User.userid == admin_id) is None:
         return
-    if _Post.get_or_none(
-        (_Post.author_id == admin_id) & (_Post.title == ANNOUNCEMENT_POST_TITLE)
-    ):
+    if _Post.get_or_none((_Post.author_id == admin_id) & (_Post.title == ANNOUNCEMENT_POST_TITLE)):
         return
 
     Post.publish(

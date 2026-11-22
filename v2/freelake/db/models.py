@@ -25,7 +25,16 @@
 
 import datetime
 
-from peewee import *
+from peewee import (
+    AutoField,
+    CharField,
+    Check,
+    CompositeKey,
+    ForeignKeyField,
+    IntegerField,
+    Model,
+    TextField,
+)
 from playhouse.mysql_ext import JSONField
 
 from const import admin, user
@@ -243,7 +252,7 @@ class ReportModel(BaseModel):
             (("target_type", "target_id"), False),
         )
         constraints = [
-            Check(f"status IN ('pending', 'handled', 'dismissed')"),
+            Check("status IN ('pending', 'handled', 'dismissed')"),
             Check(f"target_type IN ('{TARGET_POST}', '{TARGET_COMMENT}')"),
         ]
 

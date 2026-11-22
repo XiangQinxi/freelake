@@ -12,6 +12,7 @@ import os
 import streamlit as st
 import toml
 
+
 class Config:
     config = {}
 
