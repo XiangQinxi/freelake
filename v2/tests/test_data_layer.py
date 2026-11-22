@@ -889,3 +889,67 @@ def test_report_target_type_distinguishes_post_and_comment():
     # 同一人对同一目标的 pending 举报去重
     assert Report.add(reporter["userid"], postid=pid, reason="再举报") is None
 # endregion
+
+
+# ---------------------------------------------------------------------------
+# M3：会话 token（Cookie 只存 token，库里只存 sha256）
+# ---------------------------------------------------------------------------
+def test_session_token_roundtrip():
+    """签发 → 解析 → 撤销：token 明文只出现在返回值里。"""
+    user = User()
+    assert user.register("sess_user", "会话用户", "sess-pass-123") is True
+    token = api.create_session("sess_user")
+    assert token.startswith(api.TOKEN_PREFIX)
+    info = api.resolve_session(token)
+    assert info["userid"] == "sess_user"
+    assert info["role"] == api.USER_ACTIVE or info["role"] == "USER"
+
+    # 库里只有哈希，没有明文
+    rows = [r.token_hash for r in api._Session.select()]
+    assert token not in rows
+    assert api.sha256(token) in rows
+
+    assert api.resolve_session(token) is not None
+    assert api.revoke_session(token) is True
+    assert api.resolve_session(token) is None
+    # 重复撤销返回 False（已经 revoked）
+    assert api.revoke_session(token) is False
+
+
+def test_session_rejects_expired_and_disabled():
+    user = User()
+    assert user.register("sess_exp", "过期用户", "sess-pass-123") is True
+    # ttl_days=-1 → expires_at 在过去
+    expired = api.create_session("sess_exp", ttl_days=-1)
+    assert api.resolve_session(expired) is None
+
+    alive = api.create_session("sess_exp")
+    assert api.resolve_session(alive) is not None
+    api._User.update(status=api.USER_DISABLED).where(
+        api._User.userid == "sess_exp"
+    ).execute()
+    assert api.resolve_session(alive) is None
+    # 被禁用的用户也不能登录/签发
+    assert api.create_session("sess_exp") == ""
+
+
+def test_revoke_user_sessions_keeps_current():
+    user = User()
+    assert user.register("sess_multi", "多端用户", "sess-pass-123") is True
+    web = api.create_session("sess_multi")
+    phone = api.create_session("sess_multi")
+    assert api.count_sessions("sess_multi") == 2
+
+    api.revoke_user_sessions("sess_multi", keep_token=web)
+    assert api.resolve_session(web) is not None
+    assert api.resolve_session(phone) is None
+    assert api.count_sessions("sess_multi") == 1
+
+
+def test_purge_sessions_removes_expired():
+    user = User()
+    assert user.register("sess_purge", "清理用户", "sess-pass-123") is True
+    alive = api.create_session("sess_purge")
+    api.create_session("sess_purge", ttl_days=-1)
+    assert api.purge_sessions() >= 1
+    assert api.resolve_session(alive) is not None

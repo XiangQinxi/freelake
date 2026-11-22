@@ -94,6 +94,16 @@ from freelake.services.content import (  # NOQA: F401
     build_attachments_zip,
 )
 from freelake.services.interactions import Bookmark, Like, Report  # NOQA: F401
+from freelake.services.sessions import (  # NOQA: F401
+    SESSION_TTL_DAYS,
+    TOKEN_PREFIX,
+    count_sessions,
+    create_session,
+    purge_sessions,
+    resolve_session,
+    revoke_session,
+    revoke_user_sessions,
+)
 from freelake.services.posts import (  # NOQA: F401
     Post,
     _comment_id_at,

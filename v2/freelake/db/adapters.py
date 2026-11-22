@@ -9,6 +9,8 @@ v4 的列名是 snake_case（author_id / user_id / post_id ...），而页面与
 
 import json
 
+from peewee import fn
+
 from freelake.db.models import (
     USER_ACTIVE,
     AttachmentModel as _Attachment,

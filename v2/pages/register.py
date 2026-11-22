@@ -8,7 +8,7 @@ FreeLake 注册（pages/register.py）
 
 import streamlit as st
 
-from api import User
+from api import User, create_session
 
 st.subheader(":material/person_add: 注册")
 st.caption("创建账号，加入 FreeLake 自由论坛。")
@@ -53,11 +53,16 @@ with st.form("Register"):
             else:
                 if user.register(userid, username, password):  # NOQA
                     secretkey = User.issue_secret_key(userid, password)
+                    token = create_session(userid)
 
-                    cookies["userid"] = userid
-                    cookies["password"] = password
-                    cookies["secretkey"] = secretkey
+                    if token:
+                        cookies["session_token"] = token
+                        state["token"] = token
+                    for legacy_key in ("userid", "password", "secretkey"):
+                        if legacy_key in cookies:
+                            del cookies[legacy_key]
                     state["userid"] = userid
+                    state["role"] = user.get_config(userid).get("role", "")
                     state["password"] = password
                     state["secretkey"] = secretkey
                     st.toast("注册成功！")

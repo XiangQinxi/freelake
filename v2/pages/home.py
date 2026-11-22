@@ -25,8 +25,22 @@ from streamlit_video_background import render_video_background
 
 from api import (Attachment, Bookmark, Like, Post, Report, User,
                  build_attachments_zip, format_size,
-                 get_avatar_bytes, save_avatar, sha256)
+                 get_avatar_bytes, revoke_user_sessions, save_avatar, sha256)
 from api2 import check_by_state
+from freelake.web.components import (
+    avatar_link,
+    basic_information,
+    like_and_bookmarked,
+    preview,
+)
+from freelake.web.dialogs import (
+    confirm_delete_post,
+    edit_comment_dialog,
+    edit_post,
+    report_comment_dialog,
+    report_post_dialog,
+)
+from freelake.web.text import highlight_keyword, highlight_mentions
 from const import admin, tags
 
 # 主页排序选项（menu_button 展开项）与对应的查询排序键
@@ -43,44 +57,6 @@ DEFAULT_DATE_START = datetime.date(2026, 8, 1)  # 发布日期起点
 # 主页动态视频背景由 `streamlit_video_background` 扩展包提供（在下方主页视图处调用）。
 # 通过 `pip install -e streamlit-video-background` 已安装，可独立分发。
 
-
-def highlight_keyword(text: str, keyword: str) -> str:
-    """将关键词匹配片段用 Streamlit 彩色文本（:red[...]）高亮；无关键词或空文本则原样返回。"""
-    if not keyword or not text:
-        return text
-    pattern = re.compile(re.escape(keyword), re.IGNORECASE)
-    return pattern.sub(lambda m: f":red[{m.group(0)}]", text)
-
-
-def highlight_mentions(text: str) -> str:
-    """把评论/内容中的 @用户名 渲染为醒目徽章（不做真实用户解析，仅视觉高亮）。"""
-    if not text:
-        return text
-    # 匹配中英文、数字、下划线、连字符组成的 @提及
-    return re.sub(
-        r"@([A-Za-z0-9_\-\u4e00-\u9fa5]+)",
-        r":blue-badge[@\1]",
-        text,
-    )
-
-
-def avatar_link(container, avatar_name, userid, width):
-    """把头像渲染成可点击图，点击后在同一标签页跳转到用户主页（?user_id=）。
-
-    ``st.image(link=...)`` 在不同环境下可能新开标签页；这里改用不带 ``target``
-    的 ``<a>`` 包裹 ``img``，确保同标签跳转。
-    """
-    b64 = base64.b64encode(
-        get_avatar_bytes(avatar_name or "default_avatar.jpeg")
-    ).decode()
-    container.html(
-        f'<a href="?user_id={userid}" title="查看个人主页" '
-        f'style="display:inline-block;line-height:0;">'
-        f'<img src="data:image/jpeg;base64,{b64}" '
-        f'style="width:{width}px;height:{width}px;border-radius:50%;'
-        f'object-fit:cover;display:inline-block;"/>'
-        f"</a>"
-    )
 
 
 user = User()
@@ -102,273 +78,6 @@ if userconfig is None:
 
 if "attpassword" not in state:
     state["attpassword"] = sha256("")
-
-
-# region 对话框
-@st.dialog("确认删除")
-def confirm_delete_post(post_id):
-    st.warning("确定要删除这篇文章吗？此操作不可撤销！")
-    if st.button("确认删除", type="primary"):
-        try:
-            if Post.delete(post_id):
-                st.toast("文章删除成功！")
-                st.rerun()
-            else:
-                st.error("文章不存在或已被删除")
-        except Exception as e:
-            st.error(f"删除失败：{e}")
-
-
-@st.dialog("编辑该文章")
-def edit_post(post):
-    new_title = st.text_input(
-        "文章标题",
-        placeholder="请输入标题",
-        value=post["title"],
-        label_visibility="collapsed",
-    )
-    new_content = st.text_area(
-        "文章内容",
-        placeholder="请输入内容",
-        value=post["content"],
-        label_visibility="collapsed",
-    )
-    new_tags = st.multiselect(
-        "标签",
-        tags,
-        default=[t for t in (post["tags"] or []) if t in tags],
-        accept_new_options=False,
-    )
-    if st.button("提交修改"):
-        if not new_title:
-            st.error("请输入标题！")
-        elif not new_content:
-            st.error("请输入内容！")
-        else:
-            if Post.edit(post["id"], new_title, new_content, new_tags):
-                st.toast("文章修改成功！")
-                st.rerun()
-            else:
-                st.error("文章修改失败！")
-
-
-@st.dialog("编辑评论")
-def edit_comment_dialog(post_id, comment_index, current_content):
-    new_content = st.text_area(
-        "评论内容", value=current_content, label_visibility="collapsed"
-    )
-    if st.button("保存修改", type="primary"):
-        if not new_content.strip():
-            st.error("评论内容不能为空！")
-        else:
-            if Post.edit_comment(int(post_id), comment_index, new_content):
-                st.toast("评论修改成功！")
-                st.rerun()
-            else:
-                st.error("评论修改失败！")
-
-
-@st.dialog("举报文章")
-def report_post_dialog(post):
-    st.caption(f"举报文章：**{post['title']}**")
-    reason = st.text_area("举报理由", placeholder="请填写举报原因（必填）", height=120)
-    if st.button("提交举报", type="primary"):
-        reason = reason.strip()
-        if not reason:
-            st.error("请填写举报理由！")
-        else:
-            result = Report.add(
-                state["userid"],
-                postid=int(post["id"]),
-                target_userid=post["authorid"],
-                content_preview=(post["title"] or "")[:200],
-                reason=reason,
-            )
-            if result:
-                st.toast("举报已提交，管理员会尽快处理，感谢反馈！")
-                st.rerun()
-            else:
-                st.warning("你已举报过该文章，管理员正在处理中")
-
-
-@st.dialog("举报评论")
-def report_comment_dialog(post_id, comment):
-    st.caption(f"举报评论：{comment['content'][:60]}")
-    reason = st.text_area("举报理由", placeholder="请填写举报原因（必填）", height=120)
-    if st.button("提交举报", type="primary"):
-        reason = reason.strip()
-        if not reason:
-            st.error("请填写举报理由！")
-        else:
-            result = Report.add(
-                state["userid"],
-                postid=int(post_id),
-                commentid=int(comment["id"]),
-                target_userid=comment["userid"],
-                content_preview=comment["content"][:200],
-                reason=reason,
-            )
-            if result:
-                st.toast("举报已提交，管理员会尽快处理，感谢反馈！")
-                st.rerun()
-            else:
-                st.warning("你已举报过该评论，管理员正在处理中")
-
-
-# endregion
-
-
-# region 常用方法
-def basic_information(post, _config=None, compact=False):
-    """展示文章的基础信息卡片：作者头像、标题、操作菜单、标签与元信息。
-
-    _config: 作者的用户配置字典；传入时跳过重复查询（列表页批量传入）。
-    compact: 列表页紧凑模式——以一行说明文字替代元信息表格。
-    """
-    col_1, col_2, col_3 = st.columns([0.1, 0.8, 0.1])
-
-    if _config is None:
-        _config = user.get_config(post["authorid"])
-    if _config:
-        avatar = _config["avatar"]
-        username = _config["username"]
-    else:
-        avatar = "default_avatar.jpeg"
-        username = "用户已注销"
-
-    avatar_link(col_1, avatar, post["authorid"], 55)
-    col_2.subheader(post["title"])
-    if check_by_state():
-        # 更多菜单：作者/管理员可编辑、删除；其他登录用户可举报；所有登录用户可点赞、收藏
-        menu_options = []
-        if post["authorid"] == state["userid"] or userconfig["role"] == admin:
-            menu_options.append(":material/edit: 编辑")
-            menu_options.append(":material/delete: 删除")
-        elif userconfig.get("userid") != post["authorid"]:
-            menu_options.append(":material/report: 举报")
-        liked = Like.is_liked(post["id"], state["userid"])
-        bookmarked = Bookmark.is_bookmarked(post["id"], state["userid"])
-        menu_options.append(
-            ":material/favorite: 取消点赞"
-            if liked
-            else ":material/favorite_border: 点赞"
-        )
-        menu_options.append(
-            ":material/bookmark: 取消收藏"
-            if bookmarked
-            else ":material/bookmark_border: 收藏"
-        )
-        action = col_3.menu_button(
-            "",
-            options=menu_options,
-            icon=":material/more_vert:",
-            key=f"{post['id']}.menu",
-            type="tertiary",
-        )
-        match action:
-            case ":material/edit: 编辑":
-                edit_post(post)
-            case ":material/delete: 删除":
-                confirm_delete_post(post["id"])
-            case ":material/report: 举报":
-                report_post_dialog(post)
-            case ":material/favorite: 取消点赞" | ":material/favorite_border: 点赞":
-                Like.toggle(post["id"], state["userid"])
-                st.rerun()
-            case ":material/bookmark: 取消收藏" | ":material/bookmark_border: 收藏":
-                Bookmark.toggle(post["id"], state["userid"])
-                st.rerun()
-    if post["tags"]:
-        if compact:
-            st.markdown(" ".join(f":blue-badge[{tag}]" for tag in post["tags"]))
-        else:
-            for tag in post["tags"]:
-                st.badge(tag, color="primary")
-    if compact:
-        st.caption(
-            f":material/person: {username} · "
-            f":material/access_time: {post['created_at']} · "
-            f":material/visibility: {post.get('views', 0)} 次浏览"
-        )
-    else:
-        st.table(
-            {
-                ":material/person: 作者名称": username,  # NOQA
-                ":material/access_time: 发布时间": post["created_at"],
-                ":material/visibility: 浏览量": post.get("views", 0),
-                ":material/info: 文章ID": post["id"],
-            },
-            border="horizontal",
-            width="content",
-        )
-
-
-def preview(att, container, saved_name, attpassword="", auto_preview=True):
-    """在指定容器中渲染附件的缩略图/类型图标。
-
-    - 图片：可访问时生成缩略图，否则显示图片占位图标
-    - 视频/音频/其他：显示对应的 Material 图标
-    attpassword: 附件专属密码（哈希），为空表示无需密码。
-    """
-    if att.get("type", "").startswith("image/"):
-        if (
-            not attpassword
-            or not auto_preview
-            or state["attpassword"] == attpassword
-            or state["userid"] == post.get("authorid")
-            or userconfig.get("role") == admin
-        ):
-            b64 = Attachment.get_thumbnail_base64(saved_name, max_width=200)  # NOQA
-            container.image(
-                f"data:image/jpeg;base64,{b64}",  # NOQA
-                width=60,  # NOQA
-            )  # NOQA
-        else:
-            container.markdown(":material/image:")
-    elif att.get("type", "").startswith("video/"):
-        container.markdown(":material/smart_display:")
-    elif att.get("type", "").startswith("audio/"):
-        container.markdown(":material/headphones:")
-    elif att.get("type", "").startswith("application/"):
-        container.markdown(":material/insert_drive_file:")
-    else:
-        container.markdown(":material/insert_drive_file:")
-
-
-def like_and_bookmarked(post):
-    """详情页点赞与收藏按钮组（未激活 secondary，已激活 primary 更醒目）。"""
-    with st.container(horizontal=True):
-        liked = (
-            Like.is_liked(post["id"], state["userid"]) if state.get("userid") else False
-        )
-        if st.button(
-            f"{':material/favorite:' if liked else ':material/favorite_border:'} {Like.count(post['id'])}",
-            key=f"detail_like_{post['id']}",
-            type="primary" if liked else "secondary",
-        ):
-            if state.get("userid"):
-                Like.toggle(post["id"], state["userid"])
-                st.rerun()
-            else:
-                st.warning("请先登录")
-        bookmarked = (
-            Bookmark.is_bookmarked(post["id"], state["userid"])
-            if state.get("userid")
-            else False
-        )
-        if st.button(
-            f"{':material/bookmark:' if bookmarked else ':material/bookmark_border:'} {Bookmark.count(post['id'])}",
-            key=f"detail_bm_{post['id']}",
-            type="primary" if bookmarked else "secondary",
-        ):
-            if state.get("userid"):
-                Bookmark.toggle(post["id"], state["userid"])
-                st.rerun()
-            else:
-                st.warning("请先登录")
-
-
-# endregion
 
 
 # region 用户信息查询
@@ -421,14 +130,23 @@ if user_id:
                     placeholder="请输入自我介绍",
                     value=userconfig.get("description"),  # NOQA
                 )
+                # Cookie 只存会话 token，刷新后内存里没有密码；改资料需要现场输入一次。
+                current_password = st.text_input(
+                    "当前密码",
+                    type="password",
+                    key="profile_current_password",
+                    placeholder="修改资料需要验证当前密码",
+                )
                 if st.button(":material/save: 保存修改", type="primary"):
                     if not new_username or not new_description:
                         st.error("请输入用户名和自我介绍！")
+                    elif not (current_password or state.get("password")):
+                        st.error("请输入当前密码")
                     else:
                         meta = save_avatar(new_avatar) if new_avatar else {}
                         ok = user.modify(
                             state.get("userid"),
-                            state.get("password"),
+                            current_password or state.get("password"),
                             username=new_username,
                             description=new_description,
                             avatar=meta.get("path") if new_avatar else None,
@@ -460,8 +178,12 @@ if user_id:
                             )
                             if ok:
                                 state["password"] = new_password
-                                state["cookies"]["password"] = new_password
-                                st.toast("密码修改成功！")
+                                # 改密后把其他设备上的旧会话全部作废（当前会话保留）
+                                revoke_user_sessions(
+                                    state.get("userid", ""),
+                                    keep_token=state.get("token", ""),
+                                )
+                                st.toast("密码修改成功！其他设备需重新登录。")
                                 st.rerun()
                             else:
                                 st.error("原密码错误，修改失败！")

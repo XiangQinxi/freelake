@@ -23,6 +23,7 @@ import pandas as pd
 import streamlit as st
 from streamlit_file_browser import st_file_browser
 
+from const import admin as ROLE_ADMIN
 from api import (ATTACHMENTS_DIR, Post, Report, User, delete_comment_by_id,
                  delete_orphaned_attachments, delete_orphaned_comments,
                  execute_sql, export_comments_csv, export_comments_json,
@@ -68,10 +69,39 @@ def _admin_snapshot(version: int):
 
 # 权限校验必须放在页面自己身上：隐藏导航入口（main.py 的导航装配）不是鉴权——
 # 直接访问 URL 或从旧标签页进入时，页面脚本会被单独执行。
-if not User().is_admin(state.get("userid"), state.get("password")):
+# M3 起以「会话 token 恢复出的 userid + 库里的 role」判定，不再依赖内存里的密码。
+_admin_user = User()
+_admin_cfg = _admin_user.get_config(state.get("userid")) or {}
+if _admin_cfg.get("role") != ROLE_ADMIN:
     st.error("需要管理员权限，请先以管理员账号登录。", icon=":material/lock:")
     st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
     st.stop()
+
+
+def _reauth_gate() -> None:
+    """敏感操作前现场验证一次管理员密码。
+
+    Cookie 只存会话 token（M3），刷新页面后内存里的密码/密钥会随 session_state
+    一起消失；这里让管理员现场输入一次，验证通过后写回内存供本次会话使用。
+    """
+    if state.get("password") or state.get("secretkey"):
+        return
+    with st.container(border=True):
+        st.caption(
+            ":material/key: 敏感操作（改角色 / 删用户）需要再验证一次密码——"
+            "登录 Cookie 不再保存明文密码。"
+        )
+        pwd = st.text_input("管理员密码", type="password", key="reauth_password")
+        if st.button("验证", key="reauth_btn"):
+            if _admin_user.is_admin(state.get("userid"), pwd):
+                state["password"] = pwd
+                st.toast("验证成功")
+                st.rerun()
+            else:
+                st.error("密码不正确")
+
+
+_reauth_gate()
 
 # region 统计概览
 with st.expander("统计概览", expanded=True):

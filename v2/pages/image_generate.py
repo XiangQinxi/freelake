@@ -16,13 +16,15 @@ import urllib.request
 import streamlit as st
 from openai import OpenAI
 
+from const import admin as ROLE_ADMIN
 from api import User
 
 state = st.session_state
 
 # 页面自己鉴权：导航里隐藏入口不算鉴权，直接访问 URL 时页面脚本仍会被执行；
 # 这个页面还会消耗付费 API 额度，必须挡在门外。
-if not User().is_admin(state.get("userid"), state.get("password")):
+_cfg = (User().get_config(state.get("userid")) or {}) if state.get("userid") else {}
+if _cfg.get("role") != ROLE_ADMIN:
     st.error("需要管理员权限，请先以管理员账号登录。", icon=":material/lock:")
     st.page_link("pages/home.py", label=":material/arrow_back: 返回主页")
     st.stop()
